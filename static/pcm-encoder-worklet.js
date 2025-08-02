@@ -13,7 +13,10 @@ class PCMEncoderProcessor extends AudioWorkletProcessor {
     this.frameAccumulator = 0; // counts input frames until we output one frame
 
     this.outputBuffer = []; // int16 values awaiting send
-    this.chunkSize = 2400;  // 150 ms at 16 kHz (safe above minimum)
+    this.chunkSize = 3200;  // 200 ms at 16 kHz (well above minimum)
+    
+    // Debug info
+    console.log(`AudioWorklet: Input sample rate: ${this.inputSampleRate}, Output: ${this.outputSampleRate}, Ratio: ${this.resampleRatio}`);
   }
 
   process (inputs) {
@@ -31,6 +34,7 @@ class PCMEncoderProcessor extends AudioWorkletProcessor {
 
         if (this.outputBuffer.length === this.chunkSize) {
           const pcm16 = new Int16Array(this.outputBuffer);
+          console.log(`AudioWorklet: Sending chunk of ${this.chunkSize} samples (${this.chunkSize/16}ms at 16kHz)`);
           this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
           this.outputBuffer = [];
         }

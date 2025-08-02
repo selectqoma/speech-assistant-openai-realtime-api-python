@@ -132,9 +132,9 @@ async def handle_websocket(websocket: WebSocket):
                         await openai_ws.send(json.dumps(audio_append))
                         audio_chunks_since_commit += 1
                         
-                        # Commit after accumulating enough audio (approximately 150ms worth)
-                        # With 2400 samples per chunk at 16kHz, this is about 150ms per chunk
-                        if audio_chunks_since_commit >= 1:  # Commit after each chunk since we increased chunk size
+                        # Commit after accumulating enough audio (approximately 400ms worth)
+                        # With 3200 samples per chunk at 16kHz, this is about 200ms per chunk
+                        if audio_chunks_since_commit >= 2:  # Commit after 2 chunks to ensure enough audio
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
                             audio_chunks_since_commit = 0
                             print("Committed audio buffer")
