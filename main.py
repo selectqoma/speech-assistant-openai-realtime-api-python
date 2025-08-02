@@ -117,7 +117,22 @@ async def handle_websocket(websocket: WebSocket):
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
-                            # Create response after user stops talking
+                            # Create conversation item for user's speech first
+                            if conversation_store['conversation_started']:
+                                user_item = {
+                                    "type": "conversation.item.create",
+                                    "item": {
+                                        "type": "message",
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_audio_buffer"
+                                            }
+                                        ]
+                                    }
+                                }
+                                await openai_ws.send(json.dumps(user_item))
+                            # Then create AI response
                             await openai_ws.send(json.dumps({"type": "response.create"}))
                         print("Audio session stopped")
             except WebSocketDisconnect:
