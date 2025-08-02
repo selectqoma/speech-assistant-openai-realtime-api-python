@@ -155,7 +155,9 @@ async def handle_websocket(websocket: WebSocket):
                     response = json.loads(openai_message)
                     if response['type'] in LOG_EVENT_TYPES:
                         print(f"Received event: {response['type']}")
-                        if response['type'] == 'response.done':
+                        if response['type'] == 'error':
+                            print(f"Error from OpenAI: {response}")
+                        elif response['type'] == 'response.done':
                             print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
                             response_start_timestamp = None  # Reset for next response
                             response_in_progress = False
