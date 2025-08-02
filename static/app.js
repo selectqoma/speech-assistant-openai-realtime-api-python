@@ -1,7 +1,7 @@
 class SpeechAssistant {
     constructor() {
         this.ws = null;
-        this.mediaRecorder = null;
+        this.workletNode = null;   // AudioWorkletNode for PCM encoding
         this.audioContext = null;
         this.audioQueue = [];
         this.isRecording = false;
@@ -38,7 +38,7 @@ class SpeechAssistant {
             this.updateStatus('Connecting...');
             this.hideError();
             
-// Auto-connecting to backend on page load
+            // Auto-connecting to backend on page load
             // Check if we're in a secure context (HTTPS or localhost)
             const isLocalhost = window.location.hostname === 'localhost' || 
                                window.location.hostname === '127.0.0.1' ||
@@ -89,7 +89,7 @@ class SpeechAssistant {
                 throw new Error('Web Audio API is not supported in this browser.');
             }
             
-            // Create audio context with 8kHz sample rate
+            // Create audio context with 16kHz sample rate
             const AudioContextClass = window.AudioContext || window.webkitAudioContext;
             
             // Try to create with specific sample rate (not all browsers support this)
@@ -100,7 +100,7 @@ class SpeechAssistant {
                 });
             } catch (e) {
                 // Fallback to default sample rate
-                console.log('Could not set sample rate to 8kHz, using default:', e.message);
+                console.log('Could not set sample rate to 16kHz, using default:', e.message);
                 this.audioContext = new AudioContextClass();
             }
             
@@ -119,7 +119,7 @@ class SpeechAssistant {
             this.ws.onopen = () => {
                 this.isConnected = true;
                 this.updateStatus('Connected');
-                                this.micButton.disabled = false;
+                this.micButton.disabled = false;
                 console.log('WebSocket connected');
             };
 
@@ -131,7 +131,7 @@ class SpeechAssistant {
             this.ws.onclose = () => {
                 this.isConnected = false;
                 this.updateStatus('Disconnected');
-                                this.micButton.disabled = true;
+                this.micButton.disabled = true;
                 this.stopRecording();
                 console.log('WebSocket disconnected');
             };
@@ -182,57 +182,42 @@ class SpeechAssistant {
         if (this.isRecording) {
             this.stopRecording();
         } else {
-            this.startRecording();
+            await this.startRecording();
         }
     }
 
-    startRecording() {
+    async startRecording() {
         if (!this.audioStream || !this.ws) return;
 
         try {
-            // Create MediaRecorder with appropriate settings
-            const options = {
-                mimeType: 'audio/webm;codecs=opus'
-            };
-            
-            // Try to set audio settings if supported
-            if (this.audioStream.getAudioTracks().length > 0) {
-                const audioTrack = this.audioStream.getAudioTracks()[0];
-                const capabilities = audioTrack.getCapabilities();
-                if (capabilities.sampleRate) {
-                    console.log('Available sample rates:', capabilities.sampleRate);
-                }
+            // Ensure the PCM encoder worklet is loaded (only needs to happen once)
+            if (!this.audioContext.workletLoaded) {
+                await this.audioContext.audioWorklet.addModule('/static/pcm-encoder-worklet.js');
+                this.audioContext.workletLoaded = true;
             }
-            
-            this.mediaRecorder = new MediaRecorder(this.audioStream, options);
 
-            this.mediaRecorder.ondataavailable = async (event) => {
-                if (event.data.size > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    try {
-                        // Convert audio blob to PCM16 format
-                        const arrayBuffer = await event.data.arrayBuffer();
-                        const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-                        const pcm16Data = this.convertToPCM16(audioBuffer);
-                        const base64Audio = this.arrayBufferToBase64(pcm16Data);
-                        
-                        console.log('Sending audio chunk:', pcm16Data.length, 'bytes');
-                        
-                        this.ws.send(JSON.stringify({
-                            type: 'audio',
-                            audio: base64Audio,
-                            timestamp: Date.now()
-                        }));
-                    } catch (error) {
-                        console.error('Error processing audio:', error);
-                    }
+            // Create microphone source and worklet node
+            const sourceNode = this.audioContext.createMediaStreamSource(this.audioStream);
+            this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-encoder');
+
+            // Relay PCM16 chunks to the backend
+            this.workletNode.port.onmessage = ({ data }) => {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN && this.isRecording) {
+                    const base64Audio = this.arrayBufferToBase64(data);
+                    this.ws.send(JSON.stringify({
+                        type: 'audio',
+                        audio: base64Audio,
+                        timestamp: Date.now()
+                    }));
                 }
             };
 
-            // Send start message
+            // Connect the processing graph (mic → encoder)
+            sourceNode.connect(this.workletNode);
+
+            // Inform backend that a turn is starting
             this.ws.send(JSON.stringify({ type: 'start' }));
 
-            // Start recording
-            this.mediaRecorder.start(100); // Collect data every 100ms
             this.isRecording = true;
             this.micButton.classList.add('recording');
             this.micButton.textContent = '⏹️';
@@ -244,32 +229,31 @@ class SpeechAssistant {
     }
 
     stopRecording() {
-        if (this.mediaRecorder && this.isRecording) {
-            this.mediaRecorder.stop();
+        if (this.workletNode && this.isRecording) {
+            try {
+                this.workletNode.port.postMessage({ command: 'stop' });
+                this.workletNode.disconnect();
+            } catch (_) {}
+            this.workletNode = null;
+        }
+
+        if (this.isRecording) {
             this.isRecording = false;
             this.micButton.classList.remove('recording');
             this.micButton.textContent = '🎤';
 
-            // Send stop message
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(JSON.stringify({ type: 'stop' }));
             }
         }
     }
 
-
-
     convertToPCM16(audioBuffer) {
-        // Get the audio data from the first channel
         const channelData = audioBuffer.getChannelData(0);
-        
-        // Convert to PCM16 (16-bit signed integers)
         const pcm16Data = new Int16Array(channelData.length);
         for (let i = 0; i < channelData.length; i++) {
-            // Convert float [-1, 1] to int16 [-32768, 32767]
             pcm16Data[i] = Math.max(-32768, Math.min(32767, Math.round(channelData[i] * 32767)));
         }
-        
         return pcm16Data.buffer;
     }
 
@@ -297,56 +281,46 @@ class SpeechAssistant {
 
     async playAudio(base64Audio) {
         try {
-            // Decode base64 audio
             const binaryString = atob(base64Audio);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
                 bytes[i] = binaryString.charCodeAt(i);
             }
 
-            // Convert PCM16 to linear PCM
             const pcm16Data = new Int16Array(bytes.buffer);
             const linearData = new Float32Array(pcm16Data.length);
             for (let i = 0; i < pcm16Data.length; i++) {
-                // Convert int16 [-32768, 32767] to float [-1, 1]
                 linearData[i] = pcm16Data[i] / 32767.0;
             }
 
-            // Create audio buffer with the actual sample rate
             const audioBuffer = this.audioContext.createBuffer(1, linearData.length, this.audioContext.sampleRate);
             audioBuffer.getChannelData(0).set(linearData);
 
-            // Create audio source and play
             const source = this.audioContext.createBufferSource();
             const gainNode = this.audioContext.createGain();
-            
+
             source.buffer = audioBuffer;
             source.connect(gainNode);
             gainNode.connect(this.audioContext.destination);
-            
-            // Set volume
+
             gainNode.gain.value = 1.0;
-            
+
             source.start();
-            
+
             console.log('Playing audio chunk:', linearData.length, 'samples');
-            
+
         } catch (error) {
             console.error('Audio playback error:', error);
         }
     }
 
-
-
     clearAudioQueue() {
-        // Stop any currently playing audio
         if (this.audioContext) {
             this.audioContext.resume();
         }
     }
 
     setVolume(volume) {
-        // Volume is applied when creating new audio sources
         console.log('Volume set to:', volume);
     }
 }
@@ -355,7 +329,6 @@ class SpeechAssistant {
 function checkBrowserCompatibility() {
     const issues = [];
     
-    // Debug logging
     console.log('Checking browser compatibility...');
     console.log('isSecureContext:', window.isSecureContext);
     console.log('navigator.mediaDevices:', !!navigator.mediaDevices);
@@ -363,7 +336,6 @@ function checkBrowserCompatibility() {
     console.log('AudioContext:', !!(window.AudioContext || window.webkitAudioContext));
     console.log('WebSocket:', !!window.WebSocket);
     
-    // Check if we're on localhost or a local IP
     const isLocalhost = window.location.hostname === 'localhost' || 
                        window.location.hostname === '127.0.0.1' ||
                        window.location.hostname === '[::1]' ||
@@ -379,10 +351,9 @@ function checkBrowserCompatibility() {
         issues.push('This page must be accessed via HTTPS or localhost for microphone access.');
     }
     
-    // Check for getUserMedia with fallback support
     const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ||
                            !!(navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ||
-                           !!(navigator.getUserMedia); // Very old browsers
+                           !!(navigator.getUserMedia);
     
     if (!hasGetUserMedia) {
         issues.push('Your browser does not support microphone access. Please use a modern browser.');
@@ -413,4 +384,4 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const assistant = new SpeechAssistant();
     assistant.connect();
-}); 
+});
