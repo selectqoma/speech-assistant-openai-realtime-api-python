@@ -97,6 +97,7 @@ async def handle_websocket(websocket: WebSocket):
         latest_media_timestamp = 0
         mark_queue = []
         response_start_timestamp = None
+        response_in_progress = False
         
         # Use global conversation store
         global conversation_store
@@ -141,9 +142,11 @@ async def handle_websocket(websocket: WebSocket):
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
                             # Let OpenAI handle the conversation flow automatically
                             # Only create response if this isn't the first greeting
-                            if conversation_store['conversation_started']:
+                            if conversation_store['conversation_started'] and not response_in_progress:
                                 print("User finished speaking - creating AI response")
                                 await openai_ws.send(json.dumps({"type": "response.create"}))
+                            elif response_in_progress:
+                                print("Response already in progress - skipping new response creation")
                             else:
                                 print("First greeting already sent, waiting for user input")
                         print("Audio session stopped")
@@ -163,6 +166,8 @@ async def handle_websocket(websocket: WebSocket):
                         if response['type'] == 'response.done':
                             print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
                             response_start_timestamp = None  # Reset for next response
+                            response_in_progress = False
+                            print("Response finished - ready for next interaction")
 
                     if response.get('type') == 'response.audio.delta' and 'delta' in response:
                         audio_delta = {
@@ -174,6 +179,7 @@ async def handle_websocket(websocket: WebSocket):
 
                         if response_start_timestamp is None:
                             response_start_timestamp = latest_media_timestamp
+                            response_in_progress = True
                             mark_queue.append(True)  # Mark that we're in a response
                             print(f"Starting new AI response at timestamp: {response_start_timestamp}ms")
 
@@ -219,6 +225,7 @@ async def handle_websocket(websocket: WebSocket):
                 mark_queue.clear()
                 conversation_store['last_assistant_item'] = None
                 response_start_timestamp = None
+                response_in_progress = False
                 print("AI response interrupted - stopped talking")
 
         await asyncio.gather(receive_from_client(), send_to_client())
