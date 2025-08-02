@@ -49,13 +49,33 @@ class SpeechAssistant {
             this.hideError();
             
             // Check if we're in a secure context (HTTPS or localhost)
-            if (!window.isSecureContext) {
+            const isLocalhost = window.location.hostname === 'localhost' || 
+                               window.location.hostname === '127.0.0.1' ||
+                               window.location.hostname === '[::1]';
+            
+            if (!window.isSecureContext && !isLocalhost) {
                 throw new Error('Microphone access requires a secure context (HTTPS or localhost). Please access this page via HTTPS or localhost.');
             }
             
-            // Check if getUserMedia is available
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('getUserMedia is not supported in this browser. Please use a modern browser with microphone support.');
+            // Check if getUserMedia is available (with fallback for older browsers)
+            if (!navigator.mediaDevices) {
+                // Fallback for older browsers
+                navigator.mediaDevices = {};
+            }
+            
+            if (!navigator.mediaDevices.getUserMedia) {
+                // Fallback for older browsers
+                navigator.mediaDevices.getUserMedia = function(constraints) {
+                    const getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+                    
+                    if (!getUserMedia) {
+                        throw new Error('getUserMedia is not supported in this browser. Please use a modern browser with microphone support.');
+                    }
+                    
+                    return new Promise(function(resolve, reject) {
+                        getUserMedia.call(navigator, constraints, resolve, reject);
+                    });
+                };
             }
             
             // Get microphone permission
@@ -351,11 +371,28 @@ class SpeechAssistant {
 function checkBrowserCompatibility() {
     const issues = [];
     
-    if (!window.isSecureContext) {
+    // Debug logging
+    console.log('Checking browser compatibility...');
+    console.log('isSecureContext:', window.isSecureContext);
+    console.log('navigator.mediaDevices:', !!navigator.mediaDevices);
+    console.log('getUserMedia:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+    console.log('AudioContext:', !!(window.AudioContext || window.webkitAudioContext));
+    console.log('WebSocket:', !!window.WebSocket);
+    
+    // Only check secure context if we're not on localhost
+    const isLocalhost = window.location.hostname === 'localhost' || 
+                       window.location.hostname === '127.0.0.1' ||
+                       window.location.hostname === '[::1]';
+    
+    if (!window.isSecureContext && !isLocalhost) {
         issues.push('This page must be accessed via HTTPS or localhost for microphone access.');
     }
     
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // Check for getUserMedia with fallback support
+    const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ||
+                           !!(navigator.webkitGetUserMedia || navigator.mozGetUserMedia);
+    
+    if (!hasGetUserMedia) {
         issues.push('Your browser does not support microphone access. Please use a modern browser.');
     }
     
@@ -367,6 +404,7 @@ function checkBrowserCompatibility() {
         issues.push('Your browser does not support WebSockets. Please use a modern browser.');
     }
     
+    console.log('Compatibility issues found:', issues);
     return issues;
 }
 
