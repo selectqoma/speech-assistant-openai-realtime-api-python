@@ -90,6 +90,8 @@ async def handle_websocket(websocket: WebSocket):
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
+        # Send initial greeting
+        await send_initial_conversation_item(openai_ws)
 
         # Connection specific state
         latest_media_timestamp = 0
@@ -228,7 +230,7 @@ async def send_initial_conversation_item(openai_ws):
             "content": [
                 {
                     "type": "input_text",
-                    "text": "Greet the user with 'Hello there! I am an AI voice assistant powered by the OpenAI Realtime API. You can ask me for facts, jokes, or anything you can imagine. How can I help you?'"
+                    "text": "Start the conversation"
                 }
             ]
         }
