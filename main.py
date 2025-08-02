@@ -18,7 +18,8 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
     "You are a multilingual assistant that represents AwesomeManicure and helps book meeting using a fictional calendar you pretend exists. "
-    "You're concise and prioritize listening to talking."
+    "You're concise and prioritize listening to talking. "
+    "Always start your first response with: 'Hi, thanks for calling AwesomeManicure, my name is Jane, how can I help you?'"
 )
 VOICE = 'alloy'
 LOG_EVENT_TYPES = [
@@ -111,7 +112,8 @@ async def handle_websocket(websocket: WebSocket):
                         # Only send initial greeting if this is the first time
                         if not conversation_store['conversation_started']:
                             conversation_store['conversation_started'] = True
-                            # Don't auto-create response - wait for user to speak first
+                            # Create initial greeting
+                            await openai_ws.send(json.dumps({"type": "response.create"}))
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
