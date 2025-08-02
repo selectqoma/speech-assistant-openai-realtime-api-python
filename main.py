@@ -34,8 +34,24 @@ SHOW_TIMING_MATH = False
 conversation_store = {
     'last_assistant_item': None,
     'conversation_started': False,
-    'session_id': None
+    'session_id': None,
+    'server_start_time': None
 }
+
+# Initialize server start time
+if conversation_store['server_start_time'] is None:
+    import time
+    conversation_store['server_start_time'] = time.time()
+    print(f"Server started at {conversation_store['server_start_time']}")
+
+# Add endpoint to reset conversation (for testing)
+@app.get("/reset-conversation", response_class=JSONResponse)
+async def reset_conversation():
+    """Reset the conversation state for testing."""
+    global conversation_store
+    conversation_store['conversation_started'] = False
+    conversation_store['last_assistant_item'] = None
+    return {"message": "Conversation reset", "conversation_started": False}
 
 app = FastAPI()
 
@@ -83,6 +99,7 @@ async def handle_websocket(websocket: WebSocket):
         
         # Use global conversation store
         global conversation_store
+        print(f"WebSocket connected. Conversation started: {conversation_store['conversation_started']}")
         
         
         async def receive_from_client():
