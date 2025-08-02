@@ -34,8 +34,7 @@ SHOW_TIMING_MATH = False
 conversation_store = {
     'last_assistant_item': None,
     'conversation_started': False,
-    'session_id': None,
-    'user_items': []  # Track user conversation items
+    'session_id': None
 }
 
 app = FastAPI()
@@ -121,27 +120,11 @@ async def handle_websocket(websocket: WebSocket):
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
-                            # Create conversation item for user's speech first
+                            # Let OpenAI handle the conversation flow automatically
+                            # Only create response if this isn't the first greeting
                             if conversation_store['conversation_started']:
-                                print("Creating conversation item for user speech")
-                                user_item = {
-                                    "type": "conversation.item.create",
-                                    "item": {
-                                        "type": "message",
-                                        "role": "user",
-                                        "content": [
-                                            {
-                                                "type": "input_audio_buffer"
-                                            }
-                                        ]
-                                    }
-                                }
-                                await openai_ws.send(json.dumps(user_item))
-                                print("User conversation item created")
-                                conversation_store['user_items'].append("user_spoke")
-                            # Then create AI response
-                            print(f"Creating AI response. User items count: {len(conversation_store['user_items'])}")
-                            await openai_ws.send(json.dumps({"type": "response.create"}))
+                                print("User finished speaking - creating AI response")
+                                await openai_ws.send(json.dumps({"type": "response.create"}))
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")
