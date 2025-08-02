@@ -254,7 +254,7 @@ async def initialize_session(openai_ws):
                 "create_response": True,
                 "threshold": 0.5,
                 "prefix_padding_ms": 200,
-                "silence_duration_ms": 300
+                "silence_duration_ms": 1000
             },
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
