@@ -38,6 +38,8 @@ conversation_store = {
     'server_start_time': None
 }
 
+app = FastAPI()
+
 # Initialize server start time
 if conversation_store['server_start_time'] is None:
     import time
@@ -52,8 +54,6 @@ async def reset_conversation():
     conversation_store['conversation_started'] = False
     conversation_store['last_assistant_item'] = None
     return {"message": "Conversation reset", "conversation_started": False}
-
-app = FastAPI()
 
 # Create static and templates directories
 os.makedirs("static", exist_ok=True)
