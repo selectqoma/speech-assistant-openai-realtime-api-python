@@ -34,7 +34,6 @@ SHOW_TIMING_MATH = False
 # Global conversation store to maintain context across connections
 conversation_store = {
     'last_assistant_item': None,
-    'conversation_started': False,
     'session_id': None,
     'server_start_time': None
 }
@@ -52,9 +51,8 @@ if conversation_store['server_start_time'] is None:
 async def reset_conversation():
     """Reset the conversation state for testing."""
     global conversation_store
-    conversation_store['conversation_started'] = False
     conversation_store['last_assistant_item'] = None
-    return {"message": "Conversation reset", "conversation_started": False}
+    return {"message": "Conversation reset"}
 
 # Create static and templates directories
 os.makedirs("static", exist_ok=True)
@@ -101,7 +99,7 @@ async def handle_websocket(websocket: WebSocket):
         
         # Use global conversation store
         global conversation_store
-        print(f"WebSocket connected. Conversation started: {conversation_store['conversation_started']}")
+        print(f"WebSocket connected.")
         
         
         async def receive_from_client():
@@ -128,14 +126,8 @@ async def handle_websocket(websocket: WebSocket):
                         latest_media_timestamp = 0
                         # Don't reset last_assistant_item to maintain conversation context
                         
-                        # Let server VAD handle all responses, including initial greeting
-                        if not conversation_store['conversation_started']:
-                            conversation_store['conversation_started'] = True
-                            print("First conversation - triggering initial greeting")
-                            # Trigger initial greeting
-                            await openai_ws.send(json.dumps({"type": "response.create"}))
-                        else:
-                            print("Conversation already started")
+                        # Let server VAD handle all responses automatically
+                        print("Audio session started - server VAD will handle responses")
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
