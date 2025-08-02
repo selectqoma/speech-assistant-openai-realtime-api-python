@@ -94,6 +94,7 @@ async def handle_websocket(websocket: WebSocket):
     conversation_started = False  # THIS IS PER CONNECTION
     last_assistant_item_id = None  # Track the last assistant response for threading
     message_history = [{"role": "system", "content": SYSTEM_MESSAGE}]  # Track conversation history
+    waiting_for_response = False  # Track if we're waiting for an AI response
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
@@ -152,7 +153,7 @@ async def handle_websocket(websocket: WebSocket):
 
         async def send_to_client():
             """Receive events from the OpenAI Realtime API, send audio back to client."""
-            nonlocal response_start_timestamp, response_in_progress, conversation_started, last_assistant_item_id
+            nonlocal response_start_timestamp, response_in_progress, conversation_started, last_assistant_item_id, waiting_for_response
             try:
                 async for openai_message in openai_ws:
                     try:
@@ -167,6 +168,7 @@ async def handle_websocket(websocket: WebSocket):
                                 print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
                                 response_start_timestamp = None  # Reset for next response
                                 response_in_progress = False
+                                waiting_for_response = False
                                 print("Response finished - ready for next interaction")
 
                         if response.get('type') == 'response.audio.delta' and 'delta' in response:
@@ -180,6 +182,7 @@ async def handle_websocket(websocket: WebSocket):
                             if response_start_timestamp is None:
                                 response_start_timestamp = latest_media_timestamp
                                 response_in_progress = True
+                                waiting_for_response = True
                                 mark_queue.append(True)  # Mark that we're in a response
                                 print(f"Starting new AI response at timestamp: {response_start_timestamp}ms")
                                 
@@ -188,7 +191,7 @@ async def handle_websocket(websocket: WebSocket):
                                     conversation_started = True
                                     print("Conversation started - first response from assistant")
 
-                            # Update last_assistant_item safely
+                            # Update last_assistant_item_id when we get the item_id
                             if response.get('item_id'):
                                 last_assistant_item_id = response['item_id']
                                 print(f"Updated last_assistant_item_id: {response['item_id']}")
@@ -204,9 +207,10 @@ async def handle_websocket(websocket: WebSocket):
                                 await websocket.send_json({"type": "clear"})
                                 
                                 mark_queue.clear()
-                                last_assistant_item_id = None
+                                # Do NOT reset last_assistant_item_id here! It must always point to the last completed AI message.
                                 response_start_timestamp = None
                                 response_in_progress = False
+                                waiting_for_response = False
                                 print("AI response interrupted - stopped talking")
                         
                         # Handle transcription completion
@@ -214,7 +218,11 @@ async def handle_websocket(websocket: WebSocket):
                             transcript = response.get('transcript', '')
                             if transcript.strip():
                                 print(f"Transcription completed: '{transcript}'")
-                                await create_threaded_conversation_item(openai_ws, transcript, last_assistant_item_id)
+                                # Only process transcription if we're not waiting for a response
+                                if not waiting_for_response:
+                                    await create_threaded_conversation_item(openai_ws, transcript, last_assistant_item_id)
+                                else:
+                                    print("Ignoring transcription - waiting for AI response to complete")
                                 
                     except json.JSONDecodeError as e:
                         print(f"Failed to parse OpenAI message: {e}")
