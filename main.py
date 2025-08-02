@@ -128,15 +128,12 @@ async def handle_websocket(websocket: WebSocket):
                         latest_media_timestamp = 0
                         # Don't reset last_assistant_item to maintain conversation context
                         
-                        # Only send initial greeting if this is the first time
+                        # Let server VAD handle all responses, including initial greeting
                         if not conversation_store['conversation_started']:
                             conversation_store['conversation_started'] = True
-                            print("First conversation - creating initial greeting")
-                            # Create initial greeting
-                            await openai_ws.send(json.dumps({"type": "response.create"}))
+                            print("First conversation - server VAD will handle initial greeting")
                         else:
-                            print("Conversation already started, skipping greeting")
-                            # Don't create any response - let the user speak first
+                            print("Conversation already started")
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
@@ -252,8 +249,8 @@ async def initialize_session(openai_ws):
                 "type": "server_vad",
                 "create_response": True,
                 "threshold": 0.5,
-                "prefix_padding_ms": 300,
-                "silence_duration_ms": 500
+                "prefix_padding_ms": 200,
+                "silence_duration_ms": 300
             },
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
