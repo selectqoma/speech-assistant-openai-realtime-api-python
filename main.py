@@ -142,13 +142,8 @@ async def handle_websocket(websocket: WebSocket):
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
                             # Let OpenAI handle the conversation flow automatically
                             # Only create response if this isn't the first greeting
-                            if conversation_store['conversation_started'] and not response_in_progress:
-                                print("User finished speaking - creating AI response")
-                                await openai_ws.send(json.dumps({"type": "response.create"}))
-                            elif response_in_progress:
-                                print("Response already in progress - skipping new response creation")
-                            else:
-                                print("First greeting already sent, waiting for user input")
+                            # Let server VAD handle response creation automatically
+                            print("User finished speaking - letting server VAD handle response")
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")
@@ -253,9 +248,13 @@ async def initialize_session(openai_ws):
     session_update = {
         "type": "session.update",
         "session": {
-            "turn_detection": {"type": "server_vad"},
+            "turn_detection": {
+                "type": "server_vad",
+                "create_response": True
+            },
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
+            "input_audio_transcription": {"model": "whisper-1"},
             "voice": VOICE,
             "instructions": SYSTEM_MESSAGE,
             "modalities": ["text", "audio"],
