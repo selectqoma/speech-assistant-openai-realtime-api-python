@@ -131,7 +131,9 @@ async def handle_websocket(websocket: WebSocket):
                         # Let server VAD handle all responses, including initial greeting
                         if not conversation_store['conversation_started']:
                             conversation_store['conversation_started'] = True
-                            print("First conversation - server VAD will handle initial greeting")
+                            print("First conversation - triggering initial greeting")
+                            # Trigger initial greeting
+                            await openai_ws.send(json.dumps({"type": "response.create"}))
                         else:
                             print("Conversation already started")
                     elif data['type'] == 'stop':
