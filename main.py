@@ -91,6 +91,8 @@ async def handle_websocket(websocket: WebSocket):
                         print(f"Received audio chunk: {len(data['audio'])} chars")
                         await openai_ws.send(json.dumps(audio_append))
                         await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                        
+
                     elif data['type'] == 'start':
                         
                         print("Audio session started")
@@ -101,10 +103,12 @@ async def handle_websocket(websocket: WebSocket):
                         # Only send initial greeting if this is the first time
                         if not conversation_started:
                             conversation_started = True
-                            await openai_ws.send(json.dumps({"type": "response.create"}))
+                            # Don't auto-create response - wait for user to speak first
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
+                            # Create response after user stops talking
+                            await openai_ws.send(json.dumps({"type": "response.create"}))
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")
