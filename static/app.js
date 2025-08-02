@@ -76,7 +76,7 @@ class SpeechAssistant {
             // Get microphone permission with specific audio settings for OpenAI
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
-                    sampleRate: 8000,
+                    sampleRate: 16000,
                     channelCount: 1,
                     echoCancellation: true,
                     noiseSuppression: true,
@@ -95,7 +95,7 @@ class SpeechAssistant {
             // Try to create with specific sample rate (not all browsers support this)
             try {
                 this.audioContext = new AudioContextClass({
-                    sampleRate: 8000,
+                    sampleRate: 16000,
                     latencyHint: 'interactive'
                 });
             } catch (e) {

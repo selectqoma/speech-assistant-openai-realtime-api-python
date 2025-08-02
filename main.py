@@ -3,6 +3,7 @@ import json
 import base64
 import asyncio
 import websockets
+from websockets.asyncio.connection import State
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
@@ -81,12 +82,13 @@ async def handle_websocket(websocket: WebSocket):
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
-                    if data['type'] == 'audio' and not openai_ws.closed:
+                    if data['type'] == 'audio' and openai_ws.state == State.OPEN:
                         latest_media_timestamp = int(data.get('timestamp', 0))
                         audio_append = {
                             "type": "input_audio_buffer.append",
                             "audio": data['audio']
                         }
+                        print(f"Received audio chunk: {len(data['audio'])} chars")
                         await openai_ws.send(json.dumps(audio_append))
                     elif data['type'] == 'start':
                         print("Audio session started")
@@ -97,7 +99,7 @@ async def handle_websocket(websocket: WebSocket):
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")
-                if not openai_ws.closed:
+                if openai_ws.state != State.CLOSED:
                     await openai_ws.close()
 
         async def send_to_client():
@@ -114,6 +116,7 @@ async def handle_websocket(websocket: WebSocket):
                             "type": "audio",
                             "audio": response['delta']
                         }
+                        print(f"Sending AI audio chunk: {len(response['delta'])} chars")
                         await websocket.send_json(audio_delta)
 
                         if response_start_timestamp is None:
@@ -189,8 +192,8 @@ async def initialize_session(openai_ws):
         "type": "session.update",
         "session": {
             "turn_detection": {"type": "server_vad"},
-            "input_audio_format": "mulaw",
-            "output_audio_format": "mulaw",
+            "input_audio_format": {"type": "pcm16", "sample_rate": 16000},
+            "output_audio_format": {"type": "pcm16", "sample_rate": 16000},
             "voice": VOICE,
             "instructions": SYSTEM_MESSAGE,
             "modalities": ["text", "audio"],
