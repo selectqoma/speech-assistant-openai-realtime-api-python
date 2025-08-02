@@ -100,7 +100,7 @@ async def handle_websocket(websocket: WebSocket):
                         last_assistant_item = None
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
-                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.stop"}))
+                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")
