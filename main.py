@@ -75,10 +75,11 @@ async def handle_websocket(websocket: WebSocket):
         last_assistant_item = None
         mark_queue = []
         response_start_timestamp = None
+        commit_counter = 0
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp
+            nonlocal latest_media_timestamp, commit_counter
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
@@ -90,8 +91,11 @@ async def handle_websocket(websocket: WebSocket):
                         }
                         print(f"Received audio chunk: {len(data['audio'])} chars")
                         await openai_ws.send(json.dumps(audio_append))
-                        await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                        commit_counter += 1
+                        if commit_counter % 2 == 0:
+                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
                     elif data['type'] == 'start':
+                        commit_counter = 0
                         print("Audio session started")
                         response_start_timestamp = None
                         latest_media_timestamp = 0
@@ -193,8 +197,8 @@ async def initialize_session(openai_ws):
         "type": "session.update",
         "session": {
             "turn_detection": {"type": "server_vad"},
-            "input_audio_format": {"type": "pcm16", "sample_rate": 16000},
-            "output_audio_format": {"type": "pcm16", "sample_rate": 16000},
+            "input_audio_format": "pcm16",
+            "output_audio_format": "pcm16",
             "voice": VOICE,
             "instructions": SYSTEM_MESSAGE,
             "modalities": ["text", "audio"],

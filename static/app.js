@@ -4,6 +4,7 @@ class SpeechAssistant {
         this.workletNode = null;   // AudioWorkletNode for PCM encoding
         this.audioContext = null;
         this.audioQueue = [];
+        this.playingSources = [];
         this.isRecording = false;
         this.isConnected = false;
         
@@ -280,6 +281,7 @@ class SpeechAssistant {
     }
 
     async playAudio(base64Audio) {
+        if (!this.playingSources) this.playingSources = [];
         try {
             const binaryString = atob(base64Audio);
             const bytes = new Uint8Array(binaryString.length);
@@ -307,6 +309,12 @@ class SpeechAssistant {
             gainNode.gain.value = 1.0;
 
             source.start();
+            this.playingSources.push(source);
+            // Remove source from array when it ends
+            source.onended = () => {
+                const idx = this.playingSources.indexOf(source);
+                if (idx >= 0) this.playingSources.splice(idx, 1);
+            };
 
             console.log('Playing audio chunk:', linearData.length, 'samples');
 
@@ -316,8 +324,11 @@ class SpeechAssistant {
     }
 
     clearAudioQueue() {
-        if (this.audioContext) {
-            this.audioContext.resume();
+        if (this.playingSources && this.playingSources.length) {
+            this.playingSources.forEach(src => {
+                try { src.stop(); } catch (e) {}
+            });
+            this.playingSources = [];
         }
     }
 
