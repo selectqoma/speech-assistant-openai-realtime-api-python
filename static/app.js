@@ -202,14 +202,11 @@ class SpeechAssistant {
             // Create microphone source and worklet node
             const sourceNode = this.audioContext.createMediaStreamSource(this.audioStream);
             this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-encoder');
-            console.log('AudioWorklet node created:', this.workletNode);
 
             // Relay PCM16 chunks to the backend
             this.workletNode.port.onmessage = ({ data }) => {
-                console.log('App: Received message from AudioWorklet:', data);
                 if (this.ws && this.ws.readyState === WebSocket.OPEN && this.isRecording) {
                     const base64Audio = this.arrayBufferToBase64(data);
-                    console.log(`App: Received audio chunk of ${data.byteLength} bytes, base64 length: ${base64Audio.length}`);
                     this.ws.send(JSON.stringify({
                         type: 'audio',
                         audio: base64Audio,
@@ -290,7 +287,8 @@ class SpeechAssistant {
                 console.error('Server error:', data);
                 break;
             default:
-                console.log('Received message:', data);
+                // Keep this for debugging unexpected message types
+                break;
         }
     }
 
@@ -346,13 +344,6 @@ class SpeechAssistant {
 function checkBrowserCompatibility() {
     const issues = [];
     
-    console.log('Checking browser compatibility...');
-    console.log('isSecureContext:', window.isSecureContext);
-    console.log('navigator.mediaDevices:', !!navigator.mediaDevices);
-    console.log('getUserMedia:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
-    console.log('AudioContext:', !!(window.AudioContext || window.webkitAudioContext));
-    console.log('WebSocket:', !!window.WebSocket);
-    
     const isLocalhost = window.location.hostname === 'localhost' || 
                        window.location.hostname === '127.0.0.1' ||
                        window.location.hostname === '[::1]' ||
@@ -360,9 +351,6 @@ function checkBrowserCompatibility() {
                        window.location.hostname.startsWith('192.168.') ||
                        window.location.hostname.startsWith('10.') ||
                        window.location.hostname.startsWith('172.');
-    
-    console.log('Hostname:', window.location.hostname);
-    console.log('Is localhost:', isLocalhost);
     
     if (!window.isSecureContext && !isLocalhost) {
         issues.push('This page must be accessed via HTTPS or localhost for microphone access.');
@@ -384,7 +372,6 @@ function checkBrowserCompatibility() {
         issues.push('Your browser does not support WebSockets. Please use a modern browser.');
     }
     
-    console.log('Compatibility issues found:', issues);
     return issues;
 }
 

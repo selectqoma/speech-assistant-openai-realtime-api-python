@@ -31,8 +31,6 @@ class PCMEncoderProcessor extends AudioWorkletProcessor {
 
         if (this.outputBuffer.length === this.chunkSize) {
           const pcm16 = new Int16Array(this.outputBuffer);
-          // Debug: log the first few samples to see if we're getting audio
-          console.log(`AudioWorklet: Sending chunk of ${this.chunkSize} samples, first few: [${pcm16.slice(0, 5).join(', ')}]`);
           this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
           this.outputBuffer = [];
         }
