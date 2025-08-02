@@ -95,6 +95,8 @@ async def handle_websocket(websocket: WebSocket):
     last_assistant_item_id = None  # Track the last assistant response for threading
     message_history = [{"role": "system", "content": SYSTEM_MESSAGE}]  # Track conversation history
     waiting_for_response = False  # Track if we're waiting for an AI response
+    audio_buffer = []  # Buffer to accumulate audio chunks before committing
+    audio_chunks_since_commit = 0  # Track how many chunks we've received since last commit
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
@@ -114,32 +116,45 @@ async def handle_websocket(websocket: WebSocket):
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp
+            nonlocal latest_media_timestamp, audio_buffer, audio_chunks_since_commit
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
                     if data['type'] == 'audio' and openai_ws.state == State.OPEN:
                         latest_media_timestamp = int(data.get('timestamp', 0))
+                        
+                        # Append audio to buffer
                         audio_append = {
                             "type": "input_audio_buffer.append",
                             "audio": data['audio']
                         }
                         print(f"Received audio chunk: {len(data['audio'])} chars")
                         await openai_ws.send(json.dumps(audio_append))
-                        await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                        audio_chunks_since_commit += 1
                         
+                        # Commit after accumulating enough audio (approximately 150ms worth)
+                        # With 2400 samples per chunk at 16kHz, this is about 150ms per chunk
+                        if audio_chunks_since_commit >= 1:  # Commit after each chunk since we increased chunk size
+                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                            audio_chunks_since_commit = 0
+                            print("Committed audio buffer")
 
                     elif data['type'] == 'start':
-                        
                         print("Audio session started")
                         response_start_timestamp = None
                         latest_media_timestamp = 0
+                        audio_chunks_since_commit = 0
                         # Don't reset last_assistant_item to maintain conversation context
                         
                         # Let server VAD handle all responses automatically
                         print("Audio session started - server VAD will handle responses")
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
+                            # Commit any remaining audio before stopping
+                            if audio_chunks_since_commit > 0:
+                                await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                                audio_chunks_since_commit = 0
+                                print("Committed final audio buffer")
                             # No manual clear; server VAD will close the turn
                             # Let OpenAI handle the conversation flow automatically
                             # Only create response if this isn't the first greeting

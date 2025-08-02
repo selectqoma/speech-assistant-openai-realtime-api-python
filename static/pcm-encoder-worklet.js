@@ -13,7 +13,7 @@ class PCMEncoderProcessor extends AudioWorkletProcessor {
     this.frameAccumulator = 0; // counts input frames until we output one frame
 
     this.outputBuffer = []; // int16 values awaiting send
-    this.chunkSize = 1600;  // 100 ms at 16 kHz (minimum allowed by OpenAI)
+    this.chunkSize = 2400;  // 150 ms at 16 kHz (safe above minimum)
   }
 
   process (inputs) {
