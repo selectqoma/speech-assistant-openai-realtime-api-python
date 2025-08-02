@@ -150,12 +150,9 @@ async def handle_websocket(websocket: WebSocket):
                         audio_appended = False
                         # Don't reset last_assistant_item to maintain conversation context
                         
-                        # Only send initial conversation trigger if no conversation has started yet
-                        if not conversation_started:
-                            print("Sending initial conversation trigger for greeting")
-                            await send_initial_conversation_item(openai_ws)
-                        else:
-                            print("Conversation already started - no need for initial trigger")
+                        # Send initial conversation trigger to start the greeting
+                        print("Sending initial conversation trigger for greeting")
+                        await send_initial_conversation_item(openai_ws)
                         
                         # Let server VAD handle all responses automatically
                         print("Audio session started - server VAD will handle responses")
@@ -307,6 +304,7 @@ async def handle_websocket(websocket: WebSocket):
 
 async def send_initial_conversation_item(openai_ws):
     """Send initial conversation item to trigger the assistant's greeting."""
+    print("=== SENDING EMPTY PROMPT TO TRIGGER GREETING ===")
     initial_conversation_item = {
         "type": "conversation.item.create",
         "item": {
@@ -315,13 +313,17 @@ async def send_initial_conversation_item(openai_ws):
             "content": [
                 {
                     "type": "input_text",
-                    "text": "Hello"
+                    "text": ""
                 }
             ]
         }
     }
     await openai_ws.send(json.dumps(initial_conversation_item))
-    print("Sent initial conversation item - server VAD will handle response")
+    print("=== EMPTY PROMPT SENT ===")
+    
+    # Manually trigger response since empty prompt might not trigger server VAD
+    await openai_ws.send(json.dumps({"type": "response.create"}))
+    print("=== RESPONSE CREATE SENT ===")
 
 async def initialize_session(openai_ws):
     """Control initial session with OpenAI."""
