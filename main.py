@@ -144,6 +144,8 @@ async def handle_websocket(websocket: WebSocket):
                             if conversation_store['conversation_started']:
                                 print("User finished speaking - creating AI response")
                                 await openai_ws.send(json.dumps({"type": "response.create"}))
+                            else:
+                                print("First greeting already sent, waiting for user input")
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")
@@ -157,7 +159,10 @@ async def handle_websocket(websocket: WebSocket):
                 async for openai_message in openai_ws:
                     response = json.loads(openai_message)
                     if response['type'] in LOG_EVENT_TYPES:
-                        print(f"Received event: {response['type']}", response)
+                        print(f"Received event: {response['type']}")
+                        if response['type'] == 'response.done':
+                            print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
+                            response_start_timestamp = None  # Reset for next response
 
                     if response.get('type') == 'response.audio.delta' and 'delta' in response:
                         audio_delta = {
@@ -170,12 +175,12 @@ async def handle_websocket(websocket: WebSocket):
                         if response_start_timestamp is None:
                             response_start_timestamp = latest_media_timestamp
                             mark_queue.append(True)  # Mark that we're in a response
-                            if SHOW_TIMING_MATH:
-                                print(f"Setting start timestamp for new response: {response_start_timestamp}ms")
+                            print(f"Starting new AI response at timestamp: {response_start_timestamp}ms")
 
                         # Update last_assistant_item safely
                         if response.get('item_id'):
                             conversation_store['last_assistant_item'] = response['item_id']
+                            print(f"Updated last_assistant_item: {response['item_id']}")
 
                     # Handle interruption when user starts speaking
                     if response.get('type') == 'input_audio_buffer.speech_started':
