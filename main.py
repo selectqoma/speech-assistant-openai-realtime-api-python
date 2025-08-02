@@ -17,12 +17,13 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
-    "Vous êtes un assistant multilingue qui représente TropBienSaMereManicure et aide à réserver des rendez-vous en utilisant un calendrier fictif que vous prétendez exister. "
+    "Vous êtes un assistant super enthousiaste qui représente TropBienSaMereLaPuteManicure et aide à réserver des rendez-vous en utilisant un calendrier fictif que vous prétendez exister. "
     "Vous êtes concis et privilégiez l'écoute à la parole. "
-    "Votre nom est Jane. "
-    "**RÈGLE DE SALUTATION CRITIQUE** : Ne saluez qu'avec 'Bonjour, merci d'appeler AwesomeManicure, je m'appelle Jane, comment puis-je vous aider ?' si c'est la toute première interaction utilisateur de la session. "
+    "Votre nom est Jeanne. "
+    "**RÈGLE DE SALUTATION CRITIQUE** : Ne saluez qu'avec 'Bonjour, merci d'appeler TropBienSaMereLaPuteManicure, je m'appelle Jeanne, comment puis-je vous aider ?' si c'est la toute première interaction utilisateur de la session. "
     "Après cela, ne répétez jamais cette salutation, sous aucune circonstance. Répondez toujours naturellement à ce que dit l'utilisateur sans répéter la salutation. "
     "Si l'utilisateur a déjà parlé ou si ce n'est pas la première interaction, répondez directement à sa demande sans aucune salutation."
+    "A chaque replique tu est tres enthousiaste et tu réponds avec un ton très enthousiaste. "
 )
 VOICE = 'alloy'
 LOG_EVENT_TYPES = [
@@ -193,6 +194,7 @@ async def handle_websocket(websocket: WebSocket):
                                 response_start_timestamp = None  # Reset for next response
                                 response_in_progress = False
                                 waiting_for_response = False
+                                print(f"Response finished - flags reset: response_in_progress={response_in_progress}, waiting_for_response={waiting_for_response}")
                                 print("Response finished - ready for next interaction")
                             elif response['type'] == 'input_audio_buffer.appended':
                                 print("Audio successfully appended to buffer")
@@ -213,6 +215,7 @@ async def handle_websocket(websocket: WebSocket):
                                 waiting_for_response = True
                                 mark_queue.append(True)  # Mark that we're in a response
                                 print(f"Starting new AI response at timestamp: {response_start_timestamp}ms")
+                                print(f"Flags set: response_in_progress={response_in_progress}, waiting_for_response={waiting_for_response}")
                                 
                                 # Mark that conversation has started
                                 if not conversation_started:
@@ -227,7 +230,8 @@ async def handle_websocket(websocket: WebSocket):
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
                             print("Speech started detected.")
-                            if response_in_progress:
+                            # Interrupt if AI is responding OR if we're waiting for a response
+                            if response_in_progress or waiting_for_response:
                                 print("Interrupting response with response.cancel")
                                 # Graceful interruption: cancel the response and
                                 # flush the local speaker buffer.
@@ -240,6 +244,8 @@ async def handle_websocket(websocket: WebSocket):
                                 response_in_progress = False
                                 waiting_for_response = False
                                 print("AI response interrupted - stopped talking")
+                            else:
+                                print("User started speaking but no AI response in progress")
                         
                         # Handle transcription completion
                         if response.get('type') == 'conversation.item.audio_transcription.completed':
