@@ -150,8 +150,12 @@ async def handle_websocket(websocket: WebSocket):
                         audio_appended = False
                         # Don't reset last_assistant_item to maintain conversation context
                         
-                        # Automatically send initial conversation trigger to start the greeting
-                        await send_initial_conversation_item(openai_ws)
+                        # Only send initial conversation trigger if no conversation has started yet
+                        if not conversation_started:
+                            print("Sending initial conversation trigger for greeting")
+                            await send_initial_conversation_item(openai_ws)
+                        else:
+                            print("Conversation already started - no need for initial trigger")
                         
                         # Let server VAD handle all responses automatically
                         print("Audio session started - server VAD will handle responses")
