@@ -81,7 +81,7 @@ async def handle_websocket(websocket: WebSocket):
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
-                    if data['type'] == 'audio' and openai_ws.open:
+                    if data['type'] == 'audio' and not openai_ws.closed:
                         latest_media_timestamp = int(data.get('timestamp', 0))
                         audio_append = {
                             "type": "input_audio_buffer.append",
@@ -97,7 +97,7 @@ async def handle_websocket(websocket: WebSocket):
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")
-                if openai_ws.open:
+                if not openai_ws.closed:
                     await openai_ws.close()
 
         async def send_to_client():
