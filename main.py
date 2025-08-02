@@ -90,8 +90,7 @@ async def handle_websocket(websocket: WebSocket):
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
-        # Send initial greeting
-        await send_initial_conversation_item(openai_ws)
+        # Let server VAD handle all responses automatically
 
         # Connection specific state
         latest_media_timestamp = 0
@@ -132,7 +131,7 @@ async def handle_websocket(websocket: WebSocket):
                         print("Audio session started - server VAD will handle responses")
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
-                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
+                            # No manual clear; server VAD will close the turn
                             # Let OpenAI handle the conversation flow automatically
                             # Only create response if this isn't the first greeting
                             # Let server VAD handle response creation automatically
@@ -145,7 +144,7 @@ async def handle_websocket(websocket: WebSocket):
 
         async def send_to_client():
             """Receive events from the OpenAI Realtime API, send audio back to client."""
-            nonlocal response_start_timestamp
+            nonlocal response_start_timestamp, response_in_progress
             try:
                 async for openai_message in openai_ws:
                     response = json.loads(openai_message)
@@ -181,62 +180,22 @@ async def handle_websocket(websocket: WebSocket):
                     # Handle interruption when user starts speaking
                     if response.get('type') == 'input_audio_buffer.speech_started':
                         print("Speech started detected.")
-                        if conversation_store['last_assistant_item']:
-                            print(f"Interrupting response with id: {conversation_store['last_assistant_item']}")
-                            await handle_speech_started_event()
+                        if response_in_progress:
+                            print("Interrupting response with response.cancel")
+                            # Graceful interruption: cancel the response and
+                            # flush the local speaker buffer.
+                            await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                            await websocket.send_json({"type": "clear"})
+                            
+                            mark_queue.clear()
+                            conversation_store['last_assistant_item'] = None
+                            response_start_timestamp = None
+                            response_in_progress = False
+                            print("AI response interrupted - stopped talking")
             except Exception as e:
                 print(f"Error in send_to_client: {e}")
 
-        async def handle_speech_started_event():
-            """Handle interruption when the user's speech starts."""
-            nonlocal response_start_timestamp
-            print("Handling speech started event.")
-            if mark_queue and response_start_timestamp is not None:
-                elapsed_time = latest_media_timestamp - response_start_timestamp
-                if SHOW_TIMING_MATH:
-                    print(f"Calculating elapsed time for truncation: {latest_media_timestamp} - {response_start_timestamp} = {elapsed_time}ms")
-
-                if conversation_store['last_assistant_item']:
-                    if SHOW_TIMING_MATH:
-                        print(f"Truncating item with ID: {conversation_store['last_assistant_item']}, Truncated at: {elapsed_time}ms")
-
-                    truncate_event = {
-                        "type": "conversation.item.truncate",
-                        "item_id": conversation_store['last_assistant_item'],
-                        "content_index": 0,
-                        "audio_end_ms": elapsed_time
-                    }
-                    await openai_ws.send(json.dumps(truncate_event))
-
-                await websocket.send_json({
-                    "type": "clear"
-                })
-
-                mark_queue.clear()
-                conversation_store['last_assistant_item'] = None
-                response_start_timestamp = None
-                response_in_progress = False
-                print("AI response interrupted - stopped talking")
-
         await asyncio.gather(receive_from_client(), send_to_client())
-
-async def send_initial_conversation_item(openai_ws):
-    """Send initial conversation item if AI talks first."""
-    initial_conversation_item = {
-        "type": "conversation.item.create",
-        "item": {
-            "type": "message",
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_text",
-                    "text": "Start the conversation"
-                }
-            ]
-        }
-    }
-    await openai_ws.send(json.dumps(initial_conversation_item))
-    await openai_ws.send(json.dumps({"type": "response.create"}))
 
 async def initialize_session(openai_ws):
     """Control initial session with OpenAI."""
@@ -260,9 +219,6 @@ async def initialize_session(openai_ws):
     }
     print('Sending session update:', json.dumps(session_update))
     await openai_ws.send(json.dumps(session_update))
-
-    # Uncomment the next line to have the AI speak first
-    # await send_initial_conversation_item(openai_ws)
 
 if __name__ == "__main__":
     import uvicorn

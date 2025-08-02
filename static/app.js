@@ -280,6 +280,11 @@ class SpeechAssistant {
             case 'clear':
                 this.clearAudioQueue();
                 break;
+            case 'response.cancelled':
+            case 'response.done':
+                // Clear any stale playback when response is cancelled or done
+                this.clearAudioQueue();
+                break;
             default:
                 console.log('Received message:', data);
         }
