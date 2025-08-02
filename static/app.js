@@ -51,7 +51,11 @@ class SpeechAssistant {
             // Check if we're in a secure context (HTTPS or localhost)
             const isLocalhost = window.location.hostname === 'localhost' || 
                                window.location.hostname === '127.0.0.1' ||
-                               window.location.hostname === '[::1]';
+                               window.location.hostname === '[::1]' ||
+                               window.location.hostname === '0.0.0.0' ||
+                               window.location.hostname.startsWith('192.168.') ||
+                               window.location.hostname.startsWith('10.') ||
+                               window.location.hostname.startsWith('172.');
             
             if (!window.isSecureContext && !isLocalhost) {
                 throw new Error('Microphone access requires a secure context (HTTPS or localhost). Please access this page via HTTPS or localhost.');
@@ -78,13 +82,12 @@ class SpeechAssistant {
                 };
             }
             
-            // Get microphone permission
+            // Get microphone permission with flexible audio settings
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
-                    sampleRate: 8000,
-                    channelCount: 1,
                     echoCancellation: true,
-                    noiseSuppression: true
+                    noiseSuppression: true,
+                    autoGainControl: true
                 }
             });
 
@@ -93,14 +96,27 @@ class SpeechAssistant {
                 throw new Error('Web Audio API is not supported in this browser.');
             }
             
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            // Create audio context with 8kHz sample rate
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            
+            // Try to create with specific sample rate (not all browsers support this)
+            try {
+                this.audioContext = new AudioContextClass({
+                    sampleRate: 8000,
+                    latencyHint: 'interactive'
+                });
+            } catch (e) {
+                // Fallback to default sample rate
+                console.log('Could not set sample rate to 8kHz, using default:', e.message);
+                this.audioContext = new AudioContextClass();
+            }
             
             // Resume audio context if it's suspended (required for Chrome)
             if (this.audioContext.state === 'suspended') {
                 await this.audioContext.resume();
             }
             
-            this.audioContext.sampleRate = 8000;
+            console.log('Audio context sample rate:', this.audioContext.sampleRate);
 
             // Create WebSocket connection
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -185,10 +201,21 @@ class SpeechAssistant {
         if (!this.audioStream || !this.ws) return;
 
         try {
-            // Create MediaRecorder with mu-law encoding
-            this.mediaRecorder = new MediaRecorder(this.audioStream, {
+            // Create MediaRecorder with appropriate settings
+            const options = {
                 mimeType: 'audio/webm;codecs=opus'
-            });
+            };
+            
+            // Try to set audio settings if supported
+            if (this.audioStream.getAudioTracks().length > 0) {
+                const audioTrack = this.audioStream.getAudioTracks()[0];
+                const capabilities = audioTrack.getCapabilities();
+                if (capabilities.sampleRate) {
+                    console.log('Available sample rates:', capabilities.sampleRate);
+                }
+            }
+            
+            this.mediaRecorder = new MediaRecorder(this.audioStream, options);
 
             this.mediaRecorder.ondataavailable = async (event) => {
                 if (event.data.size > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -311,8 +338,8 @@ class SpeechAssistant {
                 linearData[i] = this.mulawToLinear(bytes[i]);
             }
 
-            // Create audio buffer
-            const audioBuffer = this.audioContext.createBuffer(1, linearData.length, 8000);
+            // Create audio buffer with the actual sample rate
+            const audioBuffer = this.audioContext.createBuffer(1, linearData.length, this.audioContext.sampleRate);
             audioBuffer.getChannelData(0).set(linearData);
 
             // Create audio source and play
@@ -379,10 +406,17 @@ function checkBrowserCompatibility() {
     console.log('AudioContext:', !!(window.AudioContext || window.webkitAudioContext));
     console.log('WebSocket:', !!window.WebSocket);
     
-    // Only check secure context if we're not on localhost
+    // Check if we're on localhost or a local IP
     const isLocalhost = window.location.hostname === 'localhost' || 
                        window.location.hostname === '127.0.0.1' ||
-                       window.location.hostname === '[::1]';
+                       window.location.hostname === '[::1]' ||
+                       window.location.hostname === '0.0.0.0' ||
+                       window.location.hostname.startsWith('192.168.') ||
+                       window.location.hostname.startsWith('10.') ||
+                       window.location.hostname.startsWith('172.');
+    
+    console.log('Hostname:', window.location.hostname);
+    console.log('Is localhost:', isLocalhost);
     
     if (!window.isSecureContext && !isLocalhost) {
         issues.push('This page must be accessed via HTTPS or localhost for microphone access.');
@@ -390,7 +424,8 @@ function checkBrowserCompatibility() {
     
     // Check for getUserMedia with fallback support
     const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ||
-                           !!(navigator.webkitGetUserMedia || navigator.mozGetUserMedia);
+                           !!(navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ||
+                           !!(navigator.getUserMedia); // Very old browsers
     
     if (!hasGetUserMedia) {
         issues.push('Your browser does not support microphone access. Please use a modern browser.');
