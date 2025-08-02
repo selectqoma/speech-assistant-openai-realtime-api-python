@@ -19,8 +19,10 @@ PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
     "You are a multilingual assistant that represents AwesomeManicure and helps book meeting using a fictional calendar you pretend exists. "
     "You're concise and prioritize listening to talking. "
-    "Your name is Jane. Only greet with 'Hi, thanks for calling AwesomeManicure, my name is Jane, how can I help you?' if this is the very first interaction. "
-    "After that, respond naturally to what the user says without repeating the greeting."
+    "Your name is Jane. "
+    "**CRITICAL GREETING RULE**: Only greet with 'Hi, thanks for calling AwesomeManicure, my name is Jane, how can I help you?' if this is the very first user interaction of the session. "
+    "After that, never repeat this greeting, under any circumstance. Always respond naturally to what the user says without repeating the greeting. "
+    "If the user has already spoken or if this is not the first interaction, respond directly to their request without any greeting."
 )
 VOICE = 'alloy'
 LOG_EVENT_TYPES = [
@@ -35,8 +37,7 @@ SHOW_TIMING_MATH = False
 conversation_store = {
     'last_assistant_item': None,
     'session_id': None,
-    'server_start_time': None,
-    'conversation_started': False
+    'server_start_time': None
 }
 
 app = FastAPI()
@@ -53,7 +54,6 @@ async def reset_conversation():
     """Reset the conversation state for testing."""
     global conversation_store
     conversation_store['last_assistant_item'] = None
-    conversation_store['conversation_started'] = False
     return {"message": "Conversation reset"}
 
 # Create static and templates directories
@@ -89,6 +89,9 @@ async def handle_websocket(websocket: WebSocket):
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "OpenAI-Beta": "realtime=v1"
     }
+    
+    # Connection specific state
+    conversation_started = False  # THIS IS PER CONNECTION
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
@@ -147,7 +150,7 @@ async def handle_websocket(websocket: WebSocket):
 
         async def send_to_client():
             """Receive events from the OpenAI Realtime API, send audio back to client."""
-            nonlocal response_start_timestamp, response_in_progress
+            nonlocal response_start_timestamp, response_in_progress, conversation_started
             try:
                 async for openai_message in openai_ws:
                     try:
@@ -179,8 +182,8 @@ async def handle_websocket(websocket: WebSocket):
                                 print(f"Starting new AI response at timestamp: {response_start_timestamp}ms")
                                 
                                 # Mark that conversation has started
-                                if not conversation_store['conversation_started']:
-                                    conversation_store['conversation_started'] = True
+                                if not conversation_started:
+                                    conversation_started = True
                                     print("Conversation started - first response from assistant")
 
                             # Update last_assistant_item safely
