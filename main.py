@@ -194,7 +194,7 @@ async def handle_websocket(websocket: WebSocket):
                             # Update last_assistant_item_id when we get the item_id
                             if response.get('item_id'):
                                 last_assistant_item_id = response['item_id']
-                                print(f"Updated last_assistant_item_id: {response['item_id']}")
+                                print(f"[THREAD] Updated last_assistant_item_id: {last_assistant_item_id}")
 
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
@@ -218,11 +218,12 @@ async def handle_websocket(websocket: WebSocket):
                             transcript = response.get('transcript', '')
                             if transcript.strip():
                                 print(f"Transcription completed: '{transcript}'")
-                                # Only process transcription if we're not waiting for a response
-                                if not waiting_for_response:
-                                    await create_threaded_conversation_item(openai_ws, transcript, last_assistant_item_id)
+                                if waiting_for_response:
+                                    print("[IGNORED] Still waiting for assistant reply to finish. Please wait.")
+                                elif not last_assistant_item_id:
+                                    print("[IGNORED] No assistant reply yet (no parent_id). Waiting for greeting to finish.")
                                 else:
-                                    print("Ignoring transcription - waiting for AI response to complete")
+                                    await create_threaded_conversation_item(openai_ws, transcript, last_assistant_item_id)
                                 
                     except json.JSONDecodeError as e:
                         print(f"Failed to parse OpenAI message: {e}")
