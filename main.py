@@ -35,7 +35,8 @@ SHOW_TIMING_MATH = False
 conversation_store = {
     'last_assistant_item': None,
     'session_id': None,
-    'server_start_time': None
+    'server_start_time': None,
+    'conversation_started': False
 }
 
 app = FastAPI()
@@ -52,6 +53,7 @@ async def reset_conversation():
     """Reset the conversation state for testing."""
     global conversation_store
     conversation_store['last_assistant_item'] = None
+    conversation_store['conversation_started'] = False
     return {"message": "Conversation reset"}
 
 # Create static and templates directories
@@ -90,7 +92,8 @@ async def handle_websocket(websocket: WebSocket):
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
-        # Let server VAD handle all responses automatically
+        # Send initial trigger to start the conversation
+        await send_initial_conversation_item(openai_ws)
 
         # Connection specific state
         latest_media_timestamp = 0
@@ -147,55 +150,94 @@ async def handle_websocket(websocket: WebSocket):
             nonlocal response_start_timestamp, response_in_progress
             try:
                 async for openai_message in openai_ws:
-                    response = json.loads(openai_message)
-                    if response['type'] in LOG_EVENT_TYPES:
-                        print(f"Received event: {response['type']}")
-                        if response['type'] == 'error':
-                            print(f"Error from OpenAI: {response}")
-                        elif response['type'] == 'response.done':
-                            print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
-                            response_start_timestamp = None  # Reset for next response
-                            response_in_progress = False
-                            print("Response finished - ready for next interaction")
+                    try:
+                        response = json.loads(openai_message)
+                        print(f"Received OpenAI message: {response.get('type', 'unknown')}")
+                        
+                        if response['type'] in LOG_EVENT_TYPES:
+                            print(f"Received event: {response['type']}")
+                            if response['type'] == 'error':
+                                print(f"Error from OpenAI: {response}")
+                            elif response['type'] == 'response.done':
+                                print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
+                                response_start_timestamp = None  # Reset for next response
+                                response_in_progress = False
+                                print("Response finished - ready for next interaction")
 
-                    if response.get('type') == 'response.audio.delta' and 'delta' in response:
-                        audio_delta = {
-                            "type": "audio",
-                            "audio": response['delta']
-                        }
-                        print(f"Sending AI audio chunk: {len(response['delta'])} chars")
-                        await websocket.send_json(audio_delta)
+                        if response.get('type') == 'response.audio.delta' and 'delta' in response:
+                            audio_delta = {
+                                "type": "audio",
+                                "audio": response['delta']
+                            }
+                            print(f"Sending AI audio chunk: {len(response['delta'])} chars")
+                            await websocket.send_json(audio_delta)
 
-                        if response_start_timestamp is None:
-                            response_start_timestamp = latest_media_timestamp
-                            response_in_progress = True
-                            mark_queue.append(True)  # Mark that we're in a response
-                            print(f"Starting new AI response at timestamp: {response_start_timestamp}ms")
+                            if response_start_timestamp is None:
+                                response_start_timestamp = latest_media_timestamp
+                                response_in_progress = True
+                                mark_queue.append(True)  # Mark that we're in a response
+                                print(f"Starting new AI response at timestamp: {response_start_timestamp}ms")
+                                
+                                # Mark that conversation has started
+                                if not conversation_store['conversation_started']:
+                                    conversation_store['conversation_started'] = True
+                                    print("Conversation started - first response from assistant")
 
-                        # Update last_assistant_item safely
-                        if response.get('item_id'):
-                            conversation_store['last_assistant_item'] = response['item_id']
-                            print(f"Updated last_assistant_item: {response['item_id']}")
+                            # Update last_assistant_item safely
+                            if response.get('item_id'):
+                                conversation_store['last_assistant_item'] = response['item_id']
+                                print(f"Updated last_assistant_item: {response['item_id']}")
 
-                    # Handle interruption when user starts speaking
-                    if response.get('type') == 'input_audio_buffer.speech_started':
-                        print("Speech started detected.")
-                        if response_in_progress:
-                            print("Interrupting response with response.cancel")
-                            # Graceful interruption: cancel the response and
-                            # flush the local speaker buffer.
-                            await openai_ws.send(json.dumps({"type": "response.cancel"}))
-                            await websocket.send_json({"type": "clear"})
-                            
-                            mark_queue.clear()
-                            conversation_store['last_assistant_item'] = None
-                            response_start_timestamp = None
-                            response_in_progress = False
-                            print("AI response interrupted - stopped talking")
+                        # Handle interruption when user starts speaking
+                        if response.get('type') == 'input_audio_buffer.speech_started':
+                            print("Speech started detected.")
+                            if response_in_progress:
+                                print("Interrupting response with response.cancel")
+                                # Graceful interruption: cancel the response and
+                                # flush the local speaker buffer.
+                                await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                                await websocket.send_json({"type": "clear"})
+                                
+                                mark_queue.clear()
+                                conversation_store['last_assistant_item'] = None
+                                response_start_timestamp = None
+                                response_in_progress = False
+                                print("AI response interrupted - stopped talking")
+                                
+                    except json.JSONDecodeError as e:
+                        print(f"Failed to parse OpenAI message: {e}")
+                        print(f"Raw message: {openai_message}")
+                    except Exception as e:
+                        print(f"Error processing OpenAI message: {e}")
+                        
+            except websockets.exceptions.ConnectionClosed as e:
+                print(f"OpenAI WebSocket connection closed: {e}")
+                if websocket.client_state.value != 3:  # Not CLOSED
+                    await websocket.send_json({"type": "error", "message": "Connection to AI service lost"})
             except Exception as e:
                 print(f"Error in send_to_client: {e}")
+                if websocket.client_state.value != 3:  # Not CLOSED
+                    await websocket.send_json({"type": "error", "message": f"Server error: {str(e)}"})
 
         await asyncio.gather(receive_from_client(), send_to_client())
+
+async def send_initial_conversation_item(openai_ws):
+    """Send initial conversation item to trigger the assistant's greeting."""
+    initial_conversation_item = {
+        "type": "conversation.item.create",
+        "item": {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": "Hello"
+                }
+            ]
+        }
+    }
+    await openai_ws.send(json.dumps(initial_conversation_item))
+    # Let server VAD handle the response automatically
 
 async def initialize_session(openai_ws):
     """Control initial session with OpenAI."""

@@ -285,6 +285,10 @@ class SpeechAssistant {
                 // Clear any stale playback when response is cancelled or done
                 this.clearAudioQueue();
                 break;
+            case 'error':
+                this.showError(data.message || 'Connection error occurred');
+                console.error('Server error:', data);
+                break;
             default:
                 console.log('Received message:', data);
         }
