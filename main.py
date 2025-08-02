@@ -17,7 +17,8 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
-    "You are a multilingual assistant that represents AwesomeManicure and helps book meeting using a fictional calendar you pretend exists"
+    "You are a multilingual assistant that represents AwesomeManicure and helps book meeting using a fictional calendar you pretend exists. "
+    "You're concise and prioritize listening to talking."
 )
 VOICE = 'alloy'
 LOG_EVENT_TYPES = [
