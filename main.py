@@ -90,6 +90,7 @@ async def handle_websocket(websocket: WebSocket):
                         }
                         print(f"Received audio chunk: {len(data['audio'])} chars")
                         await openai_ws.send(json.dumps(audio_append))
+                        await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
                     elif data['type'] == 'start':
                         print("Audio session started")
                         response_start_timestamp = None
