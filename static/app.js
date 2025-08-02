@@ -202,9 +202,11 @@ class SpeechAssistant {
             // Create microphone source and worklet node
             const sourceNode = this.audioContext.createMediaStreamSource(this.audioStream);
             this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-encoder');
+            console.log('AudioWorklet node created:', this.workletNode);
 
             // Relay PCM16 chunks to the backend
             this.workletNode.port.onmessage = ({ data }) => {
+                console.log('App: Received message from AudioWorklet:', data);
                 if (this.ws && this.ws.readyState === WebSocket.OPEN && this.isRecording) {
                     const base64Audio = this.arrayBufferToBase64(data);
                     console.log(`App: Received audio chunk of ${data.byteLength} bytes, base64 length: ${base64Audio.length}`);
