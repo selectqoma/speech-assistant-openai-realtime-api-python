@@ -73,11 +73,12 @@ async def handle_websocket(websocket: WebSocket):
         last_assistant_item = None
         mark_queue = []
         response_start_timestamp = None
+        conversation_started = False
         
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp
+            nonlocal latest_media_timestamp, conversation_started
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
@@ -95,7 +96,12 @@ async def handle_websocket(websocket: WebSocket):
                         print("Audio session started")
                         response_start_timestamp = None
                         latest_media_timestamp = 0
-                        last_assistant_item = None
+                        # Don't reset last_assistant_item to maintain conversation context
+                        
+                        # Only send initial greeting if this is the first time
+                        if not conversation_started:
+                            conversation_started = True
+                            await openai_ws.send(json.dumps({"type": "response.create"}))
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.clear"}))
