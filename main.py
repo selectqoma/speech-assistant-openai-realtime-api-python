@@ -123,6 +123,7 @@ async def handle_websocket(websocket: WebSocket):
 
                         if response_start_timestamp is None:
                             response_start_timestamp = latest_media_timestamp
+                            mark_queue.append(True)  # Mark that we're in a response
                             if SHOW_TIMING_MATH:
                                 print(f"Setting start timestamp for new response: {response_start_timestamp}ms")
 
@@ -167,6 +168,7 @@ async def handle_websocket(websocket: WebSocket):
                 mark_queue.clear()
                 last_assistant_item = None
                 response_start_timestamp = None
+                print("AI response interrupted - stopped talking")
 
         await asyncio.gather(receive_from_client(), send_to_client())
 
