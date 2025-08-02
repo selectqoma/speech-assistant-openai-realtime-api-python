@@ -13,25 +13,15 @@ class SpeechAssistant {
 
     initializeElements() {
         this.micButton = document.getElementById('micButton');
-        this.connectButton = document.getElementById('connectButton');
-        this.disconnectButton = document.getElementById('disconnectButton');
-        this.statusDiv = document.getElementById('status');
         this.errorDiv = document.getElementById('error');
-        this.volumeSlider = document.getElementById('volumeSlider');
     }
 
     bindEvents() {
-        this.connectButton.addEventListener('click', () => this.connect());
-        this.disconnectButton.addEventListener('click', () => this.disconnect());
         this.micButton.addEventListener('click', () => this.toggleRecording());
-        this.volumeSlider.addEventListener('input', (e) => {
-            this.setVolume(e.target.value);
-        });
     }
 
-    updateStatus(message, className) {
-        this.statusDiv.textContent = message;
-        this.statusDiv.className = `status ${className}`;
+    updateStatus(message) {
+        console.log('[STATUS]', message);
     }
 
     showError(message) {
@@ -45,9 +35,10 @@ class SpeechAssistant {
 
     async connect() {
         try {
-            this.updateStatus('Connecting...', 'connecting');
+            this.updateStatus('Connecting...');
             this.hideError();
             
+// Auto-connecting to backend on page load
             // Check if we're in a secure context (HTTPS or localhost)
             const isLocalhost = window.location.hostname === 'localhost' || 
                                window.location.hostname === '127.0.0.1' ||
@@ -82,9 +73,11 @@ class SpeechAssistant {
                 };
             }
             
-            // Get microphone permission with flexible audio settings
+            // Get microphone permission with specific audio settings for OpenAI
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
+                    sampleRate: 8000,
+                    channelCount: 1,
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true
@@ -125,10 +118,8 @@ class SpeechAssistant {
 
             this.ws.onopen = () => {
                 this.isConnected = true;
-                this.updateStatus('Connected', 'connected');
-                this.connectButton.disabled = true;
-                this.disconnectButton.disabled = false;
-                this.micButton.disabled = false;
+                this.updateStatus('Connected');
+                                this.micButton.disabled = false;
                 console.log('WebSocket connected');
             };
 
@@ -139,10 +130,8 @@ class SpeechAssistant {
 
             this.ws.onclose = () => {
                 this.isConnected = false;
-                this.updateStatus('Disconnected', 'disconnected');
-                this.connectButton.disabled = false;
-                this.disconnectButton.disabled = true;
-                this.micButton.disabled = true;
+                this.updateStatus('Disconnected');
+                                this.micButton.disabled = true;
                 this.stopRecording();
                 console.log('WebSocket disconnected');
             };
@@ -169,7 +158,7 @@ class SpeechAssistant {
             }
             
             this.showError(errorMessage);
-            this.updateStatus('Connection failed', 'disconnected');
+            this.updateStatus('Connection failed');
             console.error('Connection error:', error);
         }
     }
@@ -219,15 +208,23 @@ class SpeechAssistant {
 
             this.mediaRecorder.ondataavailable = async (event) => {
                 if (event.data.size > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    // Convert audio to mu-law format
-                    const audioBuffer = await this.convertToMulaw(event.data);
-                    const base64Audio = this.arrayBufferToBase64(audioBuffer);
-                    
-                    this.ws.send(JSON.stringify({
-                        type: 'audio',
-                        audio: base64Audio,
-                        timestamp: Date.now()
-                    }));
+                    try {
+                        // Convert audio blob to PCM16 format
+                        const arrayBuffer = await event.data.arrayBuffer();
+                        const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                        const pcm16Data = this.convertToPCM16(audioBuffer);
+                        const base64Audio = this.arrayBufferToBase64(pcm16Data);
+                        
+                        console.log('Sending audio chunk:', pcm16Data.length, 'bytes');
+                        
+                        this.ws.send(JSON.stringify({
+                            type: 'audio',
+                            audio: base64Audio,
+                            timestamp: Date.now()
+                        }));
+                    } catch (error) {
+                        console.error('Error processing audio:', error);
+                    }
                 }
             };
 
@@ -260,45 +257,20 @@ class SpeechAssistant {
         }
     }
 
-    async convertToMulaw(audioBlob) {
-        // Convert audio blob to mu-law format
-        const arrayBuffer = await audioBlob.arrayBuffer();
-        const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-        
-        // Get the audio data
+
+
+    convertToPCM16(audioBuffer) {
+        // Get the audio data from the first channel
         const channelData = audioBuffer.getChannelData(0);
         
-        // Convert to mu-law
-        const mulawData = new Uint8Array(channelData.length);
+        // Convert to PCM16 (16-bit signed integers)
+        const pcm16Data = new Int16Array(channelData.length);
         for (let i = 0; i < channelData.length; i++) {
-            mulawData[i] = this.linearToMulaw(channelData[i]);
+            // Convert float [-1, 1] to int16 [-32768, 32767]
+            pcm16Data[i] = Math.max(-32768, Math.min(32767, Math.round(channelData[i] * 32767)));
         }
         
-        return mulawData.buffer;
-    }
-
-    linearToMulaw(sample) {
-        // Convert linear PCM to mu-law
-        const MULAW_BIAS = 0x84;
-        const MULAW_CLIP = 32635;
-        
-        let sign = (sample >> 8) & 0x80;
-        if (sign !== 0) sample = -sample;
-        if (sample > MULAW_CLIP) sample = MULAW_CLIP;
-        
-        sample += MULAW_BIAS;
-        let exponent = 7;
-        let mask = 0x4000;
-        
-        while ((sample & mask) === 0 && exponent > 0) {
-            exponent--;
-            mask >>= 1;
-        }
-        
-        let mantissa = (sample >> (exponent + 3)) & 0x0F;
-        let mulaw = ~(sign | (exponent << 4) | mantissa);
-        
-        return mulaw & 0xFF;
+        return pcm16Data.buffer;
     }
 
     arrayBufferToBase64(buffer) {
@@ -332,10 +304,12 @@ class SpeechAssistant {
                 bytes[i] = binaryString.charCodeAt(i);
             }
 
-            // Convert mu-law to linear PCM
-            const linearData = new Float32Array(bytes.length);
-            for (let i = 0; i < bytes.length; i++) {
-                linearData[i] = this.mulawToLinear(bytes[i]);
+            // Convert PCM16 to linear PCM
+            const pcm16Data = new Int16Array(bytes.buffer);
+            const linearData = new Float32Array(pcm16Data.length);
+            for (let i = 0; i < pcm16Data.length; i++) {
+                // Convert int16 [-32768, 32767] to float [-1, 1]
+                linearData[i] = pcm16Data[i] / 32767.0;
             }
 
             // Create audio buffer with the actual sample rate
@@ -351,35 +325,18 @@ class SpeechAssistant {
             gainNode.connect(this.audioContext.destination);
             
             // Set volume
-            gainNode.gain.value = this.volumeSlider.value;
+            gainNode.gain.value = 1.0;
             
             source.start();
+            
+            console.log('Playing audio chunk:', linearData.length, 'samples');
             
         } catch (error) {
             console.error('Audio playback error:', error);
         }
     }
 
-    mulawToLinear(mulaw) {
-        // Convert mu-law to linear PCM
-        mulaw = ~mulaw;
-        const sign = mulaw & 0x80;
-        const exponent = (mulaw >> 4) & 0x07;
-        const mantissa = mulaw & 0x0F;
-        
-        let sample = mantissa << (exponent + 3);
-        sample += 0x84;
-        
-        if (exponent !== 0) {
-            sample += (1 << (exponent + 2));
-        }
-        
-        if (sign !== 0) {
-            sample = -sample;
-        }
-        
-        return sample / 32768.0; // Normalize to [-1, 1]
-    }
+
 
     clearAudioQueue() {
         // Stop any currently playing audio
@@ -454,5 +411,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
     
-    new SpeechAssistant();
+    const assistant = new SpeechAssistant();
+    assistant.connect();
 }); 

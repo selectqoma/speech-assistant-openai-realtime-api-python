@@ -186,25 +186,11 @@
         <h1>🎤 AI Speech Assistant</h1>
         <p class="subtitle">Powered by OpenAI Realtime API</p>
         
-        <div id="status" class="status disconnected">
-            Disconnected
-        </div>
-        
         <div id="error" class="error hidden"></div>
         
-        <button id="micButton" class="mic-button" disabled>
+        <button id="micButton" class="mic-button" disabled title="Click to start / stop recording">
             🎤
         </button>
-        
-        <div class="volume-control">
-            <label for="volumeSlider">Volume</label>
-            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.1" value="0.7">
-        </div>
-        
-        <div class="controls">
-            <button id="connectButton" class="control-button">Connect</button>
-            <button id="disconnectButton" class="control-button" disabled>Disconnect</button>
-        </div>
     </div>
 
     <script src="/static/app.js"></script>
