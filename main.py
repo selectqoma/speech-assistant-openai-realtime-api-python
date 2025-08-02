@@ -29,6 +29,13 @@ LOG_EVENT_TYPES = [
 ]
 SHOW_TIMING_MATH = False
 
+# Global conversation store to maintain context across connections
+conversation_store = {
+    'last_assistant_item': None,
+    'conversation_started': False,
+    'session_id': None
+}
+
 app = FastAPI()
 
 # Create static and templates directories
@@ -70,15 +77,16 @@ async def handle_websocket(websocket: WebSocket):
 
         # Connection specific state
         latest_media_timestamp = 0
-        last_assistant_item = None
         mark_queue = []
         response_start_timestamp = None
-        conversation_started = False
+        
+        # Use global conversation store
+        global conversation_store
         
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp, conversation_started
+            nonlocal latest_media_timestamp
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
@@ -101,8 +109,8 @@ async def handle_websocket(websocket: WebSocket):
                         # Don't reset last_assistant_item to maintain conversation context
                         
                         # Only send initial greeting if this is the first time
-                        if not conversation_started:
-                            conversation_started = True
+                        if not conversation_store['conversation_started']:
+                            conversation_store['conversation_started'] = True
                             # Don't auto-create response - wait for user to speak first
                     elif data['type'] == 'stop':
                         if openai_ws.state == State.OPEN:
@@ -117,7 +125,7 @@ async def handle_websocket(websocket: WebSocket):
 
         async def send_to_client():
             """Receive events from the OpenAI Realtime API, send audio back to client."""
-            nonlocal last_assistant_item, response_start_timestamp
+            nonlocal response_start_timestamp
             try:
                 async for openai_message in openai_ws:
                     response = json.loads(openai_message)
@@ -140,33 +148,33 @@ async def handle_websocket(websocket: WebSocket):
 
                         # Update last_assistant_item safely
                         if response.get('item_id'):
-                            last_assistant_item = response['item_id']
+                            conversation_store['last_assistant_item'] = response['item_id']
 
                     # Handle interruption when user starts speaking
                     if response.get('type') == 'input_audio_buffer.speech_started':
                         print("Speech started detected.")
-                        if last_assistant_item:
-                            print(f"Interrupting response with id: {last_assistant_item}")
+                        if conversation_store['last_assistant_item']:
+                            print(f"Interrupting response with id: {conversation_store['last_assistant_item']}")
                             await handle_speech_started_event()
             except Exception as e:
                 print(f"Error in send_to_client: {e}")
 
         async def handle_speech_started_event():
             """Handle interruption when the user's speech starts."""
-            nonlocal response_start_timestamp, last_assistant_item
+            nonlocal response_start_timestamp
             print("Handling speech started event.")
             if mark_queue and response_start_timestamp is not None:
                 elapsed_time = latest_media_timestamp - response_start_timestamp
                 if SHOW_TIMING_MATH:
                     print(f"Calculating elapsed time for truncation: {latest_media_timestamp} - {response_start_timestamp} = {elapsed_time}ms")
 
-                if last_assistant_item:
+                if conversation_store['last_assistant_item']:
                     if SHOW_TIMING_MATH:
-                        print(f"Truncating item with ID: {last_assistant_item}, Truncated at: {elapsed_time}ms")
+                        print(f"Truncating item with ID: {conversation_store['last_assistant_item']}, Truncated at: {elapsed_time}ms")
 
                     truncate_event = {
                         "type": "conversation.item.truncate",
-                        "item_id": last_assistant_item,
+                        "item_id": conversation_store['last_assistant_item'],
                         "content_index": 0,
                         "audio_end_ms": elapsed_time
                     }
@@ -177,7 +185,7 @@ async def handle_websocket(websocket: WebSocket):
                 })
 
                 mark_queue.clear()
-                last_assistant_item = None
+                conversation_store['last_assistant_item'] = None
                 response_start_timestamp = None
                 print("AI response interrupted - stopped talking")
 
