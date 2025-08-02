@@ -75,11 +75,11 @@ async def handle_websocket(websocket: WebSocket):
         last_assistant_item = None
         mark_queue = []
         response_start_timestamp = None
-        commit_counter = 0
+        
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp, commit_counter
+            nonlocal latest_media_timestamp
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
@@ -91,16 +91,16 @@ async def handle_websocket(websocket: WebSocket):
                         }
                         print(f"Received audio chunk: {len(data['audio'])} chars")
                         await openai_ws.send(json.dumps(audio_append))
-                        commit_counter += 1
-                        if commit_counter % 2 == 0:
-                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                        await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
                     elif data['type'] == 'start':
-                        commit_counter = 0
+                        
                         print("Audio session started")
                         response_start_timestamp = None
                         latest_media_timestamp = 0
                         last_assistant_item = None
                     elif data['type'] == 'stop':
+                        if openai_ws.state == State.OPEN:
+                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.stop"}))
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")

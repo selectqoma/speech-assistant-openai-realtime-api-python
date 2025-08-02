@@ -5,6 +5,7 @@ class SpeechAssistant {
         this.audioContext = null;
         this.audioQueue = [];
         this.playingSources = [];
+        this.nextPlaybackTime = 0;
         this.isRecording = false;
         this.isConnected = false;
         
@@ -281,46 +282,36 @@ class SpeechAssistant {
     }
 
     async playAudio(base64Audio) {
-        if (!this.playingSources) this.playingSources = [];
         try {
-            const binaryString = atob(base64Audio);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
+            const bytes = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
+            const pcm16 = new Int16Array(bytes.buffer);
+            const linear = Float32Array.from(pcm16, s => s / 32768);
+
+            const buf = this.audioContext.createBuffer(1, linear.length, 24000);
+            buf.getChannelData(0).set(linear);
+
+            if (this.nextPlaybackTime < this.audioContext.currentTime) {
+                this.nextPlaybackTime = this.audioContext.currentTime;
             }
 
-            const pcm16Data = new Int16Array(bytes.buffer);
-            const linearData = new Float32Array(pcm16Data.length);
-            for (let i = 0; i < pcm16Data.length; i++) {
-                linearData[i] = pcm16Data[i] / 32767.0;
-            }
+            const src = this.audioContext.createBufferSource();
+            src.buffer = buf;
+            src.connect(this.audioContext.destination);
+            this.playingSources.push(src);
+            src.start(this.nextPlaybackTime);
 
-            // Create buffer with original 16 kHz rate so the browser resamples correctly
-            const audioBuffer = this.audioContext.createBuffer(1, linearData.length, 16000);
-            audioBuffer.getChannelData(0).set(linearData);
+            this.nextPlaybackTime += buf.duration;
 
-            const source = this.audioContext.createBufferSource();
-            const gainNode = this.audioContext.createGain();
-
-            source.buffer = audioBuffer;
-            source.connect(gainNode);
-            gainNode.connect(this.audioContext.destination);
-
-            gainNode.gain.value = 1.0;
-
-            source.start();
-            this.playingSources.push(source);
-            // Remove source from array when it ends
-            source.onended = () => {
-                const idx = this.playingSources.indexOf(source);
+            // Cleanup
+            src.onended = () => {
+                src.disconnect();
+                const idx = this.playingSources.indexOf(src);
                 if (idx >= 0) this.playingSources.splice(idx, 1);
             };
-
-            console.log('Playing audio chunk:', linearData.length, 'samples');
-
         } catch (error) {
             console.error('Audio playback error:', error);
         }
+
     }
 
     clearAudioQueue() {
@@ -329,6 +320,7 @@ class SpeechAssistant {
                 try { src.stop(); } catch (e) {}
             });
             this.playingSources = [];
+            this.nextPlaybackTime = 0;
         }
     }
 
