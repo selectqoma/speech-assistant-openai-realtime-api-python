@@ -59,13 +59,14 @@ async def handle_websocket(websocket: WebSocket):
     print("Client connected")
     await websocket.accept()
 
-    async with websockets.connect(
-        'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01',
-        extra_headers={
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "OpenAI-Beta": "realtime=v1"
-        }
-    ) as openai_ws:
+    # Create connection with proper headers
+    uri = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01'
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "OpenAI-Beta": "realtime=v1"
+    }
+    
+    async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
 
         # Connection specific state
