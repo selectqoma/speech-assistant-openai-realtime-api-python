@@ -17,7 +17,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
-    "Vous êtes un assistant multilingue qui représente AwesomeManicure et aide à réserver des rendez-vous en utilisant un calendrier fictif que vous prétendez exister. "
+    "Vous êtes un assistant multilingue qui représente TropBienSaMereManicure et aide à réserver des rendez-vous en utilisant un calendrier fictif que vous prétendez exister. "
     "Vous êtes concis et privilégiez l'écoute à la parole. "
     "Votre nom est Jane. "
     "**RÈGLE DE SALUTATION CRITIQUE** : Ne saluez qu'avec 'Bonjour, merci d'appeler AwesomeManicure, je m'appelle Jane, comment puis-je vous aider ?' si c'est la toute première interaction utilisateur de la session. "
@@ -102,8 +102,7 @@ async def handle_websocket(websocket: WebSocket):
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
-        # Send initial trigger to start the conversation
-        await send_initial_conversation_item(openai_ws)
+        # Don't send initial trigger here - wait for user to start recording
 
         # Connection specific state
         latest_media_timestamp = 0
@@ -150,6 +149,9 @@ async def handle_websocket(websocket: WebSocket):
                         audio_chunks_since_commit = 0
                         audio_appended = False
                         # Don't reset last_assistant_item to maintain conversation context
+                        
+                        # Automatically send initial conversation trigger to start the greeting
+                        await send_initial_conversation_item(openai_ws)
                         
                         # Let server VAD handle all responses automatically
                         print("Audio session started - server VAD will handle responses")
