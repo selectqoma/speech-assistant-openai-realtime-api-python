@@ -293,7 +293,8 @@ class SpeechAssistant {
                 linearData[i] = pcm16Data[i] / 32767.0;
             }
 
-            const audioBuffer = this.audioContext.createBuffer(1, linearData.length, this.audioContext.sampleRate);
+            // Create buffer with original 16 kHz rate so the browser resamples correctly
+            const audioBuffer = this.audioContext.createBuffer(1, linearData.length, 16000);
             audioBuffer.getChannelData(0).set(linearData);
 
             const source = this.audioContext.createBufferSource();
