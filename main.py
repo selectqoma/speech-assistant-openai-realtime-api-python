@@ -29,7 +29,7 @@ LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',
     'response.done', 'input_audio_buffer.committed',
     'input_audio_buffer.speech_stopped', 'input_audio_buffer.speech_started',
-    'session.created'
+    'session.created', 'conversation.item.audio_transcription.completed'
 ]
 SHOW_TIMING_MATH = False
 
@@ -92,6 +92,8 @@ async def handle_websocket(websocket: WebSocket):
     
     # Connection specific state
     conversation_started = False  # THIS IS PER CONNECTION
+    last_assistant_item_id = None  # Track the last assistant response for threading
+    message_history = [{"role": "system", "content": SYSTEM_MESSAGE}]  # Track conversation history
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
@@ -150,7 +152,7 @@ async def handle_websocket(websocket: WebSocket):
 
         async def send_to_client():
             """Receive events from the OpenAI Realtime API, send audio back to client."""
-            nonlocal response_start_timestamp, response_in_progress, conversation_started
+            nonlocal response_start_timestamp, response_in_progress, conversation_started, last_assistant_item_id
             try:
                 async for openai_message in openai_ws:
                     try:
@@ -188,8 +190,8 @@ async def handle_websocket(websocket: WebSocket):
 
                             # Update last_assistant_item safely
                             if response.get('item_id'):
-                                conversation_store['last_assistant_item'] = response['item_id']
-                                print(f"Updated last_assistant_item: {response['item_id']}")
+                                last_assistant_item_id = response['item_id']
+                                print(f"Updated last_assistant_item_id: {response['item_id']}")
 
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
@@ -202,10 +204,17 @@ async def handle_websocket(websocket: WebSocket):
                                 await websocket.send_json({"type": "clear"})
                                 
                                 mark_queue.clear()
-                                conversation_store['last_assistant_item'] = None
+                                last_assistant_item_id = None
                                 response_start_timestamp = None
                                 response_in_progress = False
                                 print("AI response interrupted - stopped talking")
+                        
+                        # Handle transcription completion
+                        if response.get('type') == 'conversation.item.audio_transcription.completed':
+                            transcript = response.get('transcript', '')
+                            if transcript.strip():
+                                print(f"Transcription completed: '{transcript}'")
+                                await create_threaded_conversation_item(openai_ws, transcript, last_assistant_item_id)
                                 
                     except json.JSONDecodeError as e:
                         print(f"Failed to parse OpenAI message: {e}")
@@ -221,6 +230,38 @@ async def handle_websocket(websocket: WebSocket):
                 print(f"Error in send_to_client: {e}")
                 if websocket.client_state.value != 3:  # Not CLOSED
                     await websocket.send_json({"type": "error", "message": f"Server error: {str(e)}"})
+
+        async def create_threaded_conversation_item(openai_ws, transcript, parent_id=None):
+            """Create a conversation item with proper threading."""
+            nonlocal message_history
+            
+            # Add user message to history
+            message_history.append({"role": "user", "content": transcript})
+            
+            # Create conversation item with threading
+            conversation_item = {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": transcript
+                        }
+                    ]
+                }
+            }
+            
+            # Add parent_id for threading if available
+            if parent_id:
+                conversation_item["parent_id"] = parent_id
+                print(f"Creating threaded conversation item with parent_id: {parent_id}")
+            else:
+                print("Creating conversation item without parent_id (first message)")
+            
+            await openai_ws.send(json.dumps(conversation_item))
+            print(f"Sent conversation item: '{transcript}'")
 
         await asyncio.gather(receive_from_client(), send_to_client())
 
@@ -240,7 +281,7 @@ async def send_initial_conversation_item(openai_ws):
         }
     }
     await openai_ws.send(json.dumps(initial_conversation_item))
-    # Let server VAD handle the response automatically
+    print("Sent initial conversation item - server VAD will handle response")
 
 async def initialize_session(openai_ws):
     """Control initial session with OpenAI."""
