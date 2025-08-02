@@ -207,6 +207,7 @@ class SpeechAssistant {
             this.workletNode.port.onmessage = ({ data }) => {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN && this.isRecording) {
                     const base64Audio = this.arrayBufferToBase64(data);
+                    console.log(`App: Received audio chunk of ${data.byteLength} bytes, base64 length: ${base64Audio.length}`);
                     this.ws.send(JSON.stringify({
                         type: 'audio',
                         audio: base64Audio,

@@ -13,7 +13,7 @@ class PCMEncoderProcessor extends AudioWorkletProcessor {
     this.frameAccumulator = 0; // counts input frames until we output one frame
 
     this.outputBuffer = []; // int16 values awaiting send
-    this.chunkSize = 1600;  // 100 ms at 16 kHz (minimum allowed by OpenAI)   // 100 ms at 16 kHz (minimum allowed by OpenAI)
+    this.chunkSize = 2400;  // 150 ms at 16 kHz (safe above minimum)   // 100 ms at 16 kHz (minimum allowed by OpenAI)
   }
 
   process (inputs) {
@@ -31,6 +31,8 @@ class PCMEncoderProcessor extends AudioWorkletProcessor {
 
         if (this.outputBuffer.length === this.chunkSize) {
           const pcm16 = new Int16Array(this.outputBuffer);
+          // Debug: log the first few samples to see if we're getting audio
+          console.log(`AudioWorklet: Sending chunk of ${this.chunkSize} samples, first few: [${pcm16.slice(0, 5).join(', ')}]`);
           this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
           this.outputBuffer = [];
         }
