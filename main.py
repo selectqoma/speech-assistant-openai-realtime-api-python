@@ -179,6 +179,7 @@ async def handle_websocket(websocket: WebSocket):
     audio_buffer = []  # Buffer to accumulate audio chunks before committing
     audio_chunks_since_commit = 0  # Track how many chunks we've received since last commit
     audio_appended = False  # Track if audio was successfully appended
+    greeting_start_time = None  # Track when greeting starts to protect it
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
@@ -300,6 +301,9 @@ async def handle_websocket(websocket: WebSocket):
                                 if not conversation_started:
                                     conversation_started = True
                                     print("Conversation started - first response from assistant")
+                                    # Set greeting start time to protect it from interruption
+                                    import time
+                                    greeting_start_time = time.time()
 
                             # Update last_assistant_item_id when we get the item_id
                             if response.get('item_id'):
@@ -309,6 +313,13 @@ async def handle_websocket(websocket: WebSocket):
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
                             print("Speech started detected.")
+                            # Add protection for greeting - don't interrupt during first 4 seconds of greeting
+                            import time
+                            current_time = time.time()
+                            if greeting_start_time and (current_time - greeting_start_time) < 4:
+                                print("Protecting greeting from interruption - too early")
+                                continue
+                            
                             # Interrupt if AI is responding OR if we're waiting for a response
                             if response_in_progress or waiting_for_response:
                                 print("Interrupting response with response.cancel")
@@ -418,8 +429,9 @@ async def initialize_session(openai_ws):
             "turn_detection": {
                 "type": "server_vad",
                 "create_response": True,
-                "threshold": 0.5,
-                "prefix_padding_ms": 200
+                "threshold": 0.3,
+                "prefix_padding_ms": 1000,
+                "suffix_padding_ms": 500
             },
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
