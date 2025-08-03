@@ -235,6 +235,10 @@ async def handle_websocket(websocket: WebSocket):
                                 print(f"Error from OpenAI: {response}")
                             elif response['type'] == 'response.done':
                                 print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
+                                # Update last_assistant_item_id when response is completed
+                                if response.get('response', {}).get('item_id'):
+                                    last_assistant_item_id = response['response']['item_id']
+                                    print(f"[THREAD] Updated last_assistant_item_id on response.done: {last_assistant_item_id}")
                                 response_start_timestamp = None  # Reset for next response
                                 response_in_progress = False
                                 waiting_for_response = False
@@ -269,10 +273,7 @@ async def handle_websocket(websocket: WebSocket):
                                     import time
                                     greeting_start_time = time.time()
 
-                            # Update last_assistant_item_id when we get the item_id
-                            if response.get('item_id'):
-                                last_assistant_item_id = response['item_id']
-                                print(f"[THREAD] Updated last_assistant_item_id: {last_assistant_item_id}")
+                            # Note: last_assistant_item_id is now updated in response.done event
 
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
