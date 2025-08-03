@@ -10,6 +10,12 @@ from fastapi.websockets import WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
+from moving_agent import (
+    create_moving_request, save_client_name, save_move_date, 
+    save_locations, save_volume, save_floors, set_price_estimate,
+    set_requires_on_site_check, complete_request, get_current_request
+)
+from dataclasses import asdict
 
 load_dotenv()
 
@@ -17,16 +23,43 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
-    "You are an enthusiastic multilingual assistant for a professional moving company. "
-    "You help customers with moving services, quotes, scheduling, and general inquiries. "
+    "You are Eva, an enthusiastic multilingual assistant for a professional moving company. "
+    "You help customers with moving services by following a structured conversation flow to gather information efficiently. "
     "You are concise and prioritize listening over talking. "
-    "Your name is Sarah. "
-    "**CRITICAL GREETING RULE**: Only greet with 'Hello, thank you for calling Professional Movers, my name is Sarah, how can I help you today?' if this is the very first user interaction of the session. "
+    "Your name is Eva. "
+    "**CRITICAL GREETING RULE**: Only greet with 'Hi, I'm Eva, thanks for calling Professional Movers, how can I help you?' if this is the very first user interaction of the session. "
     "After that, never repeat this greeting under any circumstance. Always respond naturally to what the user says without repeating the greeting. "
     "If the user has already spoken or if this is not the first interaction, respond directly to their request without any greeting. "
-    "You can respond in English, Dutch, or French based on the customer's language preference. "
+    "Always respond in English by default. Only switch to Dutch or French if the customer specifically speaks those languages to you. "
     "You are very enthusiastic and helpful with every response. "
-    "You can help with: moving quotes, scheduling moves, packing services, storage solutions, international moves, and general moving questions."
+    
+    "**STRUCTURED CONVERSATION FLOW**: Follow this specific scenario for each new moving request:\n"
+    "1. GREETING: 'Hi, I'm Eva, thanks for calling Professional Movers, how can I help you?' (only on first interaction)\n"
+    "2. INITIAL RESPONSE: 'Ok...' and acknowledge their request\n"
+    "3. COLLECT INFORMATION (one question at a time):\n"
+    "   - When does the client want the move? (save with create_moving_request() and save_move_date())\n"
+    "   - Where to where? (save with save_locations())\n"
+    "   - Volume of stuff to transport? (save with save_volume())\n"
+    "   - Which floor to which floor? (save with save_floors() - this determines if lift is needed)\n"
+    "4. PRICING: Assess the price or mention that one of the team needs to come check on-site\n"
+    "5. CLIENT INFO: Ask for their name and tell them someone will get back ASAP (save with save_client_name())\n"
+    "6. COMPLETE: Use complete_request() to finalize and save the request\n"
+    
+    "**FUNCTION CALLING**: You have access to these functions to save information:\n"
+    "- create_moving_request(): Creates a new request and returns it with an ID\n"
+    "- save_move_date(request_id, date): Saves when they want to move\n"
+    "- save_locations(request_id, from_location, to_location): Saves origin and destination\n"
+    "- save_volume(request_id, volume): Saves description of items to move\n"
+    "- save_floors(request_id, from_floor, to_floor): Saves floor info and determines if lift needed\n"
+    "- save_client_name(request_id, name): Saves client's name\n"
+    "- set_price_estimate(request_id, estimate): Saves price estimate\n"
+    "- set_requires_on_site_check(request_id, true/false): Marks if on-site check needed\n"
+    "- complete_request(request_id): Finalizes and saves the request to file\n"
+    "- get_current_request(request_id): Gets current request data\n"
+    
+    "Always call these functions when you receive the relevant information from the customer. "
+    "Keep responses short and focused on getting the information you need. "
+    "Be enthusiastic and professional throughout the conversation."
 )
 VOICE = 'alloy'
 LOG_EVENT_TYPES = [
@@ -81,6 +114,31 @@ async def index_page(request: Request):
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "message": "Speech Assistant is running!"}
+
+@app.get("/moving-requests", response_class=JSONResponse)
+async def get_moving_requests():
+    """Get all moving requests."""
+    from moving_agent import moving_agent
+    requests = moving_agent.get_all_requests()
+    return {
+        "active_requests": {req_id: asdict(req) for req_id, req in requests.items()},
+        "total_active": len(requests)
+    }
+
+@app.get("/moving-requests/{request_id}", response_class=JSONResponse)
+async def get_moving_request(request_id: str):
+    """Get a specific moving request."""
+    from moving_agent import moving_agent
+    request = moving_agent.get_current_request(request_id)
+    if request:
+        return asdict(request)
+    else:
+        # Try to load from file
+        request = moving_agent.load_request_from_file(request_id)
+        if request:
+            return asdict(request)
+        else:
+            return {"error": "Request not found"}, 404
 
 @app.websocket("/ws")
 async def handle_websocket(websocket: WebSocket):
