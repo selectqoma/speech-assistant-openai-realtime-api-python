@@ -156,7 +156,7 @@ async def handle_websocket(websocket: WebSocket):
     # Connection specific state
     conversation_started = False  # THIS IS PER CONNECTION
     last_assistant_item_id = None  # Track the last assistant response for threading
-    message_history = [{"role": "system", "content": SYSTEM_MESSAGE}]  # Track conversation history
+    message_history = []  # Track conversation history (system message sent via session.update)
     waiting_for_response = False  # Track if we're waiting for an AI response
     audio_buffer = []  # Buffer to accumulate audio chunks before committing
     audio_chunks_since_commit = 0  # Track how many chunks we've received since last commit
@@ -298,7 +298,7 @@ async def handle_websocket(websocket: WebSocket):
                             # Add protection for greeting - don't interrupt during first 4 seconds of greeting
                             import time
                             current_time = time.time()
-                            if greeting_start_time and (current_time - greeting_start_time) < 4:
+                            if greeting_start_time and (current_time - greeting_start_time) < 6:
                                 print("Protecting greeting from interruption - too early")
                                 continue
                             
