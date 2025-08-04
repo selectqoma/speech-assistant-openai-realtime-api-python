@@ -299,11 +299,10 @@ async def initialize_session(openai_ws):
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
             "input_audio_transcription": {"model": "whisper-1"},
-            "voice": VOICE,
+            "voice": 'eva',
             "instructions": SYSTEM_MESSAGE,
             "modalities": ["text", "audio"],
             "temperature": 0.8,
-            "speech_rate": 1.5,  # 1.2x faster speech
         }
     }
     print(f'Using voice: {VOICE}')
