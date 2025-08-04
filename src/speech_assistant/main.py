@@ -251,14 +251,17 @@ async def handle_websocket(websocket: WebSocket):
                         if response.get('type') == 'response.audio_transcript.done':
                             # Get the full transcript from the response
                             full_transcript = response.get('transcript', '')
+                            print(f"Eva transcription event received: '{full_transcript}' (length: {len(full_transcript)})")
                             if full_transcript.strip():
-                                print(f"Assistant response transcript: '{full_transcript}'")
+                                print(f"Eva transcript saved: '{full_transcript}'")
                                 # Log assistant transcript
                                 simple_call_logger.add_transcript_entry(
                                     call_id, 
                                     "assistant", 
                                     full_transcript
                                 )
+                            else:
+                                print("Eva transcript was empty, not saving")
 
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
@@ -273,14 +276,17 @@ async def handle_websocket(websocket: WebSocket):
                         # Handle transcription completion
                         if response.get('type') == 'conversation.item.audio_transcription.completed':
                             transcript = response.get('transcript', '')
+                            print(f"User transcription event received: '{transcript}' (length: {len(transcript)})")
                             if transcript.strip():
-                                print(f"Transcription completed: '{transcript}'")
+                                print(f"User transcript saved: '{transcript}'")
                                 # Log user transcript
                                 simple_call_logger.add_transcript_entry(
                                     call_id, 
                                     "user", 
                                     transcript
                                 )
+                            else:
+                                print("User transcript was empty, not saving")
                                 
                     except json.JSONDecodeError as e:
                         print(f"Failed to parse OpenAI message: {e}")
