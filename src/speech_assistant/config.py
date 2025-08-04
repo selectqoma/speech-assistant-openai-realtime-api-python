@@ -30,6 +30,8 @@ SYSTEM_MESSAGE = (
     "Keep responses super short and direct. No long explanations. "
     "Be professional and straightforward throughout the conversation. "
     "If the query doesn't concern moving or anything related to The Moving Company, politely decline and say 'I'm sorry, I can only help with moving services.' "
+    "Make sure to understand from the customer where they want to move to and from. Make sure there are real cities"
+    "Ask for their name and phone number, very important."
     "Greet users with 'Hi, I'm Eva from Movers.be, how can I help you?'"
 )
 
@@ -38,7 +40,7 @@ LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',
     'response.done', 'input_audio_buffer.committed',
     'input_audio_buffer.speech_stopped', 'input_audio_buffer.speech_started',
-    'session.created', 'conversation.item.audio_transcription.completed',
+            'session.created', 'conversation.item.input_audio_transcription.completed',
     'input_audio_buffer.appended'
 ]
 

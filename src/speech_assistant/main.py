@@ -274,7 +274,7 @@ async def handle_websocket(websocket: WebSocket):
                                 response_start_timestamp = None
                         
                         # Handle transcription completion
-                        if response.get('type') == 'conversation.item.audio_transcription.completed':
+                        if response.get('type') == 'conversation.item.input_audio_transcription.completed':
                             transcript = response.get('transcript', '')
                             print(f"User transcription event received: '{transcript}' (length: {len(transcript)})")
                             if transcript.strip():
