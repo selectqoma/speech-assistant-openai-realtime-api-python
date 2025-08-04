@@ -27,6 +27,9 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p static templates moving_requests
 
+# Install the package in development mode
+RUN pip install -e .
+
 # Expose port
 EXPOSE 5050
 

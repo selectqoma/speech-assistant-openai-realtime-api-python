@@ -5,6 +5,8 @@ from typing import Dict, Optional, Any
 from dataclasses import dataclass, asdict
 import uuid
 
+from .config import MOVING_REQUESTS_DIR
+
 @dataclass
 class MovingRequest:
     """Data structure for moving request information."""
@@ -26,7 +28,7 @@ class MovingRequest:
 class MovingAgent:
     """Agent for managing moving request data collection."""
     
-    def __init__(self, storage_dir: str = "moving_requests"):
+    def __init__(self, storage_dir: str = MOVING_REQUESTS_DIR):
         self.storage_dir = storage_dir
         self.active_requests: Dict[str, MovingRequest] = {}
         self._ensure_storage_dir()
