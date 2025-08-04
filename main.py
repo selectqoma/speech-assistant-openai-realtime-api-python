@@ -279,22 +279,23 @@ async def handle_websocket(websocket: WebSocket):
 
 async def send_initial_conversation_item(openai_ws):
     """Send initial conversation item if AI talks first."""
-    initial_conversation_item = {
+    # Send a system message to trigger the greeting
+    system_message = {
         "type": "conversation.item.create",
         "item": {
             "type": "message",
-            "role": "user",
+            "role": "system",
             "content": [
                 {
                     "type": "input_text",
-                    "text": "Please greet me and introduce yourself as Eva from The Moving Company."
+                    "text": "Greet the user now with your introduction."
                 }
             ]
         }
     }
-    await openai_ws.send(json.dumps(initial_conversation_item))
+    await openai_ws.send(json.dumps(system_message))
     await openai_ws.send(json.dumps({"type": "response.create"}))
-    print("Sent initial greeting request")
+    print("Sent system message to trigger greeting")
 
 
 async def initialize_session(openai_ws):
