@@ -4,7 +4,7 @@ import base64
 import asyncio
 import websockets
 from websockets.asyncio.connection import State
-from fastapi import FastAPI, WebSocket, Request
+from fastapi import FastAPI, WebSocket, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -92,8 +92,6 @@ async def get_call_logs():
 @app.get("/call-logs/{log_id}", response_class=JSONResponse)
 async def get_call_log(log_id: str):
     """Get a specific call log."""
-    from fastapi import HTTPException
-    
     # Try to get active call first
     active_call = call_logger.get_active_call(log_id)
     if active_call:
