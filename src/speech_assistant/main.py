@@ -15,7 +15,7 @@ from .config import (
     OPENAI_API_KEY, PORT, SYSTEM_MESSAGE, VOICE, LOG_EVENT_TYPES,
     GREETING, SHOW_TIMING_MATH, STATIC_DIR, TEMPLATES_DIR
 )
-# Moving agent functionality removed - will be replaced with call logging
+from .call_logger import call_logger
 
 # Global conversation store to maintain context across connections
 conversation_store = {
@@ -63,10 +63,30 @@ async def health_check():
 @app.get("/call-logs", response_class=JSONResponse)
 async def get_call_logs():
     """Get all call logs."""
-    # TODO: Implement call logging functionality
+    import os
+    import glob
+    
+    # Get all call log files
+    call_log_files = glob.glob(os.path.join(CALL_LOG_DIR, "*.json"))
+    call_logs = []
+    
+    for file_path in call_log_files:
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                call_logs.append(data)
+        except Exception as e:
+            print(f"Error loading call log {file_path}: {e}")
+    
+    # Add active calls
+    active_calls = call_logger.get_all_active_calls()
+    for call_id, call_log in active_calls.items():
+        call_logs.append(asdict(call_log))
+    
     return {
-        "message": "Call logging functionality coming soon",
-        "total_logs": 0
+        "call_logs": call_logs,
+        "total_logs": len(call_logs),
+        "active_calls": len(active_calls)
     }
 
 @app.get("/call-logs/{log_id}", response_class=JSONResponse)
@@ -74,14 +94,41 @@ async def get_call_log(log_id: str):
     """Get a specific call log."""
     from fastapi import HTTPException
     
-    # TODO: Implement call log retrieval
-    raise HTTPException(status_code=404, detail="Call logging not yet implemented")
+    # Try to get active call first
+    active_call = call_logger.get_active_call(log_id)
+    if active_call:
+        return asdict(active_call)
+    
+    # Try to load from file
+    call_log = call_logger.load_call_log(log_id)
+    if call_log:
+        return asdict(call_log)
+    
+    raise HTTPException(status_code=404, detail="Call log not found")
+
+@app.post("/call-logs/{log_id}/end", response_class=JSONResponse)
+async def end_call(log_id: str):
+    """End a call and generate summary."""
+    summary = await call_logger.end_call(log_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Call not found")
+    
+    return {
+        "message": "Call ended successfully",
+        "summary": summary,
+        "call_id": log_id
+    }
 
 @app.websocket("/ws")
 async def handle_websocket(websocket: WebSocket):
     """Handle WebSocket connections for local speech assistant."""
     print("Client connected")
     await websocket.accept()
+
+    # Start call logging
+    call_log = call_logger.start_call()
+    call_id = call_log.id
+    print(f"Started call logging with ID: {call_id}")
 
     # Create connection with proper headers
     uri = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01'
@@ -180,6 +227,28 @@ async def handle_websocket(websocket: WebSocket):
                             # Update last_assistant_item safely
                             if response.get('item_id'):
                                 last_assistant_item = response['item_id']
+                        
+                        # Handle assistant text responses for logging
+                        if response.get('type') == 'response.audio_transcript.delta':
+                            # This captures the assistant's speech as text
+                            transcript_delta = response.get('delta', '')
+                            if transcript_delta.strip():
+                                # We'll accumulate the full transcript when response is done
+                                pass
+                        
+                        # Handle completed assistant responses
+                        if response.get('type') == 'response.audio_transcript.done':
+                            # Get the full transcript from the response
+                            full_transcript = response.get('transcript', '')
+                            if full_transcript.strip():
+                                print(f"Assistant response transcript: '{full_transcript}'")
+                                # Log assistant transcript
+                                call_logger.add_transcript_entry(
+                                    call_id, 
+                                    "assistant", 
+                                    full_transcript, 
+                                    latest_media_timestamp
+                                )
 
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
@@ -196,6 +265,13 @@ async def handle_websocket(websocket: WebSocket):
                             transcript = response.get('transcript', '')
                             if transcript.strip():
                                 print(f"Transcription completed: '{transcript}'")
+                                # Log user transcript
+                                call_logger.add_transcript_entry(
+                                    call_id, 
+                                    "user", 
+                                    transcript, 
+                                    latest_media_timestamp
+                                )
                                 
                     except json.JSONDecodeError as e:
                         print(f"Failed to parse OpenAI message: {e}")

@@ -10,5 +10,6 @@ __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
 from .main import app
+from .call_logger import call_logger
 
-__all__ = ["app"] 
+__all__ = ["app", "call_logger"] 
