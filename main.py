@@ -24,18 +24,13 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
     "You are Eva, the virtual assistant for Movers.be, a Belgian moving company. "
-    "Your name is Eva and you work for Movers.be. "
     "You help customers with moving services by asking direct questions to gather information efficiently. "
     "You are concise and prioritize listening over talking. "
-    "You are very enthusiastic and helpful with every response. "
-    "Always respond in English by default. Only switch to Dutch or French if the customer specifically speaks those languages to you. "
+    "Your name is Eva. "
     "Ask direct questions to gather moving information: 'From where to where do you want to move?', 'Do you need the lift?', 'When do you want to move?', 'How many rooms?', etc. Keep responses short and focused on getting the information you need. "
-    "**CRITICAL GREETING RULE**: Only greet with 'Hi, I'm Eva from Movers.be, how can I help you?' if this is the very first user interaction of the session. After that, never repeat this greeting under any circumstance. Always respond naturally to what the user says without repeating the greeting. "
-    "If the user has already spoken or if this is not the first interaction, respond directly to their request without any greeting. "
-    "**CRITICAL: ONE QUESTION AT A TIME RULE**: You MUST ask only ONE question per response. NEVER ask multiple questions in the same response. Wait for the customer's answer before asking the next question. "
-    "Keep responses SUPER SHORT and direct. No long explanations. "
-    "Be enthusiastic and professional throughout the conversation. "
-    "**CRITICAL RULE**: Ask ONLY ONE question per response. Wait for the customer's answer before asking the next question. This is absolutely essential for a smooth conversation flow."
+    "Ask only ONE question per response. Wait for the customer's answer before asking the next question. "
+    "Keep responses super short and direct. No long explanations. "
+    "Be enthusiastic and professional throughout the conversation."
 )
 VOICE = 'alloy'
 LOG_EVENT_TYPES = [
@@ -132,15 +127,10 @@ async def handle_websocket(websocket: WebSocket):
     }
     
     # Connection specific state
-    conversation_started = False  # THIS IS PER CONNECTION
-    has_sent_greeting = False  # Track if greeting has been sent for this connection
-    last_assistant_item_id = None  # Track the last assistant response for threading
-    message_history = []  # Track conversation history (system message sent via session.update)
-    waiting_for_response = False  # Track if we're waiting for an AI response
-    audio_buffer = []  # Buffer to accumulate audio chunks before committing
-    audio_chunks_since_commit = 0  # Track how many chunks we've received since last commit
-    audio_appended = False  # Track if audio was successfully appended
-    greeting_start_time = None  # Track when greeting starts to protect it
+    latest_media_timestamp = 0
+    last_assistant_item = None
+    mark_queue = []
+    response_start_timestamp = None
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
@@ -159,62 +149,27 @@ async def handle_websocket(websocket: WebSocket):
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp, audio_buffer, audio_chunks_since_commit, audio_appended
+            nonlocal latest_media_timestamp
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
                     if data['type'] == 'audio' and openai_ws.state == State.OPEN:
                         latest_media_timestamp = int(data.get('timestamp', 0))
-                        
-                        # Append audio to buffer
                         audio_append = {
                             "type": "input_audio_buffer.append",
                             "audio": data['audio']
                         }
-                        print(f"Received audio chunk: {len(data['audio'])} chars")
                         await openai_ws.send(json.dumps(audio_append))
-                        audio_chunks_since_commit += 1
-                        # Note: audio_appended flag is set in the 'append' ack handler only
-                        print(f"Appended audio chunk {audio_chunks_since_commit}")
-                        
-                        # Commit after accumulating enough audio and getting confirmation
-                        if audio_chunks_since_commit >= 2 and audio_appended:  # Commit after 2 chunks to ensure enough audio
-                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-                            audio_chunks_since_commit = 0
-                            audio_appended = False
-                            print("Committed audio buffer")
 
                     elif data['type'] == 'start':
                         print("Audio session started")
                         response_start_timestamp = None
                         latest_media_timestamp = 0
-                        audio_chunks_since_commit = 0
-                        audio_appended = False
-                        # Don't reset last_assistant_item to maintain conversation context
+                        last_assistant_item = None
                         
-                        # Send initial conversation trigger only if greeting hasn't been sent
-                        if not has_sent_greeting:
-                            print("Sending initial conversation trigger for greeting")
-                            await send_initial_conversation_item(openai_ws)
-                            has_sent_greeting = True
-                        else:
-                            print("Greeting already sent, skipping initial trigger")
-                        
-                        # Let server VAD handle all responses automatically
-                        print("Audio session started - server VAD will handle responses")
+                        # Send initial conversation trigger
+                        await send_initial_conversation_item(openai_ws)
                     elif data['type'] == 'stop':
-                        if openai_ws.state == State.OPEN:
-                            # Commit any remaining audio before stopping
-                            if audio_chunks_since_commit > 0 and audio_appended:
-                                await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-                                audio_chunks_since_commit = 0
-                                audio_appended = False
-                                print("Committed final audio buffer")
-                            # No manual clear; server VAD will close the turn
-                            # Let OpenAI handle the conversation flow automatically
-                            # Only create response if this isn't the first greeting
-                            # Let server VAD handle response creation automatically
-                            print("User finished speaking - letting server VAD handle response")
                         print("Audio session stopped")
             except WebSocketDisconnect:
                 print("Client disconnected.")
@@ -223,7 +178,7 @@ async def handle_websocket(websocket: WebSocket):
 
         async def send_to_client():
             """Receive events from the OpenAI Realtime API, send audio back to client."""
-            nonlocal response_start_timestamp, response_in_progress, conversation_started, last_assistant_item_id, waiting_for_response, audio_appended
+            nonlocal response_start_timestamp, last_assistant_item
             try:
                 async for openai_message in openai_ws:
                     try:
@@ -236,81 +191,37 @@ async def handle_websocket(websocket: WebSocket):
                                 print(f"Error from OpenAI: {response}")
                             elif response['type'] == 'response.done':
                                 print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
-                                # Update last_assistant_item_id when response is completed
-                                if response.get('response', {}).get('item_id'):
-                                    last_assistant_item_id = response['response']['item_id']
-                                    print(f"[THREAD] Updated last_assistant_item_id on response.done: {last_assistant_item_id}")
-                                response_start_timestamp = None  # Reset for next response
-                                response_in_progress = False
-                                waiting_for_response = False
-                                print(f"Response finished - flags reset: response_in_progress={response_in_progress}, waiting_for_response={waiting_for_response}")
-                                print("Response finished - ready for next interaction")
-                            elif response['type'] == 'input_audio_buffer.appended':
-                                print("Audio successfully appended to buffer")
-                                # Set flag to indicate audio was appended
-                                audio_appended = True
+                                response_start_timestamp = None
 
                         if response.get('type') == 'response.audio.delta' and 'delta' in response:
                             audio_delta = {
                                 "type": "audio",
                                 "audio": response['delta']
                             }
-                            print(f"Sending AI audio chunk: {len(response['delta'])} chars")
                             await websocket.send_json(audio_delta)
 
                             if response_start_timestamp is None:
                                 response_start_timestamp = latest_media_timestamp
-                                response_in_progress = True
-                                waiting_for_response = True
-                                mark_queue.append(True)  # Mark that we're in a response
-                                print(f"Starting new AI response at timestamp: {response_start_timestamp}ms")
-                                print(f"Flags set: response_in_progress={response_in_progress}, waiting_for_response={waiting_for_response}")
-                                
-                                # Mark that conversation has started
-                                if not conversation_started:
-                                    conversation_started = True
-                                    print("Conversation started - first response from assistant")
-                                    # Set greeting start time to protect it from interruption
-                                    import time
-                                    greeting_start_time = time.time()
 
-                            # Note: last_assistant_item_id is now updated in response.done event
+                            # Update last_assistant_item safely
+                            if response.get('item_id'):
+                                last_assistant_item = response['item_id']
 
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
                             print("Speech started detected.")
-                            # Add protection for greeting - don't interrupt during first 4 seconds of greeting
-                            import time
-                            current_time = time.time()
-                            if greeting_start_time and (current_time - greeting_start_time) < 6:
-                                print("Protecting greeting from interruption - too early")
-                                continue
-                            
-                            # Interrupt if AI is responding OR if we're waiting for a response
-                            if response_in_progress or waiting_for_response:
-                                print("Interrupting response with response.cancel")
-                                # Graceful interruption: cancel the response and
-                                # flush the local speaker buffer.
+                            if last_assistant_item:
+                                print(f"Interrupting response with id: {last_assistant_item}")
                                 await openai_ws.send(json.dumps({"type": "response.cancel"}))
                                 await websocket.send_json({"type": "clear"})
-                                
-                                mark_queue.clear()
-                                # Do NOT reset last_assistant_item_id here! It must always point to the last completed AI message.
+                                last_assistant_item = None
                                 response_start_timestamp = None
-                                response_in_progress = False
-                                waiting_for_response = False
-                                print("AI response interrupted - stopped talking")
-                            else:
-                                print("User started speaking but no AI response in progress")
                         
                         # Handle transcription completion
                         if response.get('type') == 'conversation.item.audio_transcription.completed':
                             transcript = response.get('transcript', '')
                             if transcript.strip():
                                 print(f"Transcription completed: '{transcript}'")
-                                # The server already created the user item & queued a response.
-                                # No need to manually create another conversation item.
-                                pass
                                 
                     except json.JSONDecodeError as e:
                         print(f"Failed to parse OpenAI message: {e}")
@@ -329,10 +240,6 @@ async def handle_websocket(websocket: WebSocket):
 
         async def create_threaded_conversation_item(openai_ws, transcript, parent_id=None):
             """Create a conversation item with proper threading."""
-            nonlocal message_history
-            
-            # Add user message to history
-            message_history.append({"role": "user", "content": transcript})
             
             # Create conversation item with threading
             conversation_item = {
@@ -366,27 +273,7 @@ async def handle_websocket(websocket: WebSocket):
         await asyncio.gather(receive_from_client(), send_to_client())
 
 async def send_initial_conversation_item(openai_ws):
-    """Send initial conversation item to trigger the assistant's greeting."""
-    print("=== SENDING SYSTEM MESSAGE AND INITIAL PROMPT ===")
-    
-    # First, send a system message to ensure the assistant knows its role
-    system_item = {
-        "type": "conversation.item.create",
-        "item": {
-            "type": "message",
-            "role": "system",
-            "content": [
-                {
-                    "type": "input_text",
-                    "text": SYSTEM_MESSAGE
-                }
-            ]
-        }
-    }
-    await openai_ws.send(json.dumps(system_item))
-    print("=== SYSTEM MESSAGE SENT ===")
-    
-    # Then send the initial user message
+    """Send initial conversation item if AI talks first."""
     initial_conversation_item = {
         "type": "conversation.item.create",
         "item": {
@@ -395,30 +282,20 @@ async def send_initial_conversation_item(openai_ws):
             "content": [
                 {
                     "type": "input_text",
-                    "text": "Start the conversation"
+                    "text": "Greet the user with 'Hi, I'm Eva from Movers.be, how can I help you?'"
                 }
             ]
         }
     }
     await openai_ws.send(json.dumps(initial_conversation_item))
-    print("=== INITIAL PROMPT SENT ===")
-    
-    # Manually trigger response since empty prompt might not trigger server VAD
     await openai_ws.send(json.dumps({"type": "response.create"}))
-    print("=== RESPONSE CREATE SENT ===")
 
 async def initialize_session(openai_ws):
     """Control initial session with OpenAI."""
     session_update = {
         "type": "session.update",
         "session": {
-            "turn_detection": {
-                "type": "server_vad",
-                "create_response": True,
-                "threshold": 0.3,
-                "prefix_padding_ms": 1000,
-                "suffix_padding_ms": 500
-            },
+            "turn_detection": {"type": "server_vad"},
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
             "input_audio_transcription": {"model": "whisper-1"},
