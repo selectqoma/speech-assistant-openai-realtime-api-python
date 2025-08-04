@@ -307,13 +307,11 @@ class SpeechAssistant {
 
             const src = this.audioContext.createBufferSource();
             src.buffer = buf;
-            src.playbackRate.setValueAtTime(1.1, this.audioContext.currentTime); // 1.1x faster playback
             src.connect(this.audioContext.destination);
             this.playingSources.push(src);
             src.start(this.nextPlaybackTime);
 
-            this.nextPlaybackTime += buf.duration / 1.1; // Adjust timing for faster playback
-            console.log('Playing audio at 1.1x speed, duration:', buf.duration, 'adjusted duration:', buf.duration / 1.1);
+            this.nextPlaybackTime += buf.duration; // Normal playback timing
 
             // Cleanup
             src.onended = () => {
