@@ -48,6 +48,12 @@ LOG_EVENT_TYPES = [
 GREETING = "Hi, I'm Eva, how can I help you?"
 SHOW_TIMING_MATH = False
 
+# Cost Optimization Settings
+MIN_TRANSCRIPT_ENTRIES_FOR_PROCESSING = 2  # Skip processing for very short calls
+USE_GPT_35_TURBO = True  # Use cheaper model for processing
+MAX_TOKENS_SUMMARY = 200  # Limit token usage
+MAX_TOKENS_STRUCTURED = 150  # Limit token usage
+
 # File Paths
 CALL_LOG_DIR = "call_log"
 STATIC_DIR = "static"

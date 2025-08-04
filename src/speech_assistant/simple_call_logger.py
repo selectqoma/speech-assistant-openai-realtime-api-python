@@ -8,7 +8,11 @@ import os
 from datetime import datetime
 from typing import Dict, List
 import aiohttp
-from .config import OPENAI_API_KEY, CALL_LOG_DIR
+from .config import (
+    OPENAI_API_KEY, CALL_LOG_DIR, 
+    MIN_TRANSCRIPT_ENTRIES_FOR_PROCESSING,
+    USE_GPT_35_TURBO, MAX_TOKENS_SUMMARY, MAX_TOKENS_STRUCTURED
+)
 
 class SimpleCallLogger:
     """Simple call logger that saves transcripts to files and generates summaries."""
@@ -76,12 +80,26 @@ class SimpleCallLogger:
         duration = (end_time - start_time).total_seconds()
         call_data["duration_seconds"] = duration
         
-        # Generate summary and extract structured data
-        summary = await self._generate_summary(call_data)
-        structured_data = await self._extract_structured_data(call_data)
-        
-        call_data["summary"] = summary
-        call_data["structured_data"] = structured_data
+        # Cost optimization: Only process if call has meaningful content
+        transcript_entries = len(call_data["transcript"])
+        if transcript_entries < MIN_TRANSCRIPT_ENTRIES_FOR_PROCESSING:  # Skip processing for very short calls
+            call_data["summary"] = "Call too short to process"
+            call_data["structured_data"] = {
+                "name": "",
+                "purpose": "",
+                "where_from": "",
+                "where_to": "",
+                "lift": "",
+                "how_many_rooms": "",
+                "extra_info": "Call too short to extract meaningful data"
+            }
+        else:
+            # Generate summary and extract structured data
+            summary = await self._generate_summary(call_data)
+            structured_data = await self._extract_structured_data(call_data)
+            
+            call_data["summary"] = summary
+            call_data["structured_data"] = structured_data
         
         # Save complete call log
         call_log_file = os.path.join(self.storage_dir, f"{call_id}_complete.json")
@@ -96,8 +114,8 @@ class SimpleCallLogger:
         # Remove from active calls
         del self.active_calls[call_id]
         
-        print(f"Call {call_id} ended. Duration: {duration:.1f}s")
-        return summary
+        print(f"Call {call_id} ended. Duration: {duration:.1f}s, Entries: {transcript_entries}")
+        return call_data["summary"]
     
     async def _extract_structured_data(self, call_data: Dict) -> Dict:
         """Extract structured data from the conversation using GPT-4o-mini."""
@@ -146,7 +164,7 @@ If any information is not available, use empty string "". Return ONLY the JSON o
                 }
                 
                 data = {
-                    "model": "gpt-4o-mini",
+                    "model": "gpt-3.5-turbo" if USE_GPT_35_TURBO else "gpt-4o-mini",
                     "messages": [
                         {
                             "role": "system",
@@ -157,7 +175,7 @@ If any information is not available, use empty string "". Return ONLY the JSON o
                             "content": prompt
                         }
                     ],
-                    "max_tokens": 200,
+                    "max_tokens": MAX_TOKENS_STRUCTURED,
                     "temperature": 0.1
                 }
                 
@@ -252,7 +270,7 @@ Keep it concise and professional (2-3 sentences per section).
                 }
                 
                 data = {
-                    "model": "gpt-4o-mini",
+                    "model": "gpt-3.5-turbo" if USE_GPT_35_TURBO else "gpt-4o-mini",
                     "messages": [
                         {
                             "role": "system",
@@ -263,7 +281,7 @@ Keep it concise and professional (2-3 sentences per section).
                             "content": prompt
                         }
                     ],
-                    "max_tokens": 300,
+                    "max_tokens": MAX_TOKENS_SUMMARY,
                     "temperature": 0.3
                 }
                 
