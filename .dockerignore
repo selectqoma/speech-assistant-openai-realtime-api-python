@@ -52,10 +52,10 @@ Dockerfile
 README.md
 *.md
 
-# Environment files (should be provided at runtime)
-.env
-.env.local
-.env.*.local
+# Environment files (will be included in build)
+# .env
+# .env.local
+# .env.*.local
 
 # Logs
 *.log

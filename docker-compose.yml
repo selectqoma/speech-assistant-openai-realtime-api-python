@@ -5,9 +5,10 @@ services:
     build: .
     ports:
       - "5050:5050"
+    env_file:
+      - .env
     environment:
       - PORT=5050
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       - ./moving_requests:/app/moving_requests
     restart: unless-stopped
