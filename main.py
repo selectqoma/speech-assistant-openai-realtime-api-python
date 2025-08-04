@@ -32,7 +32,7 @@ SYSTEM_MESSAGE = (
     "Keep responses super short and direct. No long explanations. "
     "Be enthusiastic and professional throughout the conversation."
 )
-VOICE = 'nova'  # Female voice
+VOICE = 'echo'  # Female voice
 LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',
     'response.done', 'input_audio_buffer.committed',
@@ -303,9 +303,10 @@ async def initialize_session(openai_ws):
             "instructions": SYSTEM_MESSAGE,
             "modalities": ["text", "audio"],
             "temperature": 0.8,
-            "speech_rate": 1.2,  # 1.2x faster speech
+            "speech_rate": 1.5,  # 1.2x faster speech
         }
     }
+    print(f'Using voice: {VOICE}')
     print('Sending session update:', json.dumps(session_update))
     await openai_ws.send(json.dumps(session_update))
 
