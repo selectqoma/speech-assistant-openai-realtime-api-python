@@ -35,7 +35,7 @@ SYSTEM_MESSAGE = (
     "If the query doesn't concern moving or anything related to The Moving Company, politely decline and say 'I'm sorry, I can only help with moving services.' "
     "Greet users with 'Hi, I'm Eva from Movers.be, how can I help you?'"
 )
-VOICE = 'shimmers'  
+VOICE = 'shimmer'  
 LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',
     'response.done', 'input_audio_buffer.committed',
@@ -44,7 +44,7 @@ LOG_EVENT_TYPES = [
     'input_audio_buffer.appended'
 ]
 
-GREETING = "Hi, I'm Eva from Movers.be, how can I help you?"
+GREETING = "Hi, I'm Eva, how can I help you?"
 SHOW_TIMING_MATH = False
 
 # Global conversation store to maintain context across connections
@@ -287,13 +287,14 @@ async def send_initial_conversation_item(openai_ws):
             "content": [
                 {
                     "type": "input_text",
-                    "text": "Hello"
+                    "text": "Please greet me and introduce yourself as Eva from The Moving Company."
                 }
             ]
         }
     }
     await openai_ws.send(json.dumps(initial_conversation_item))
     await openai_ws.send(json.dumps({"type": "response.create"}))
+    print("Sent initial greeting request")
 
 
 async def initialize_session(openai_ws):
@@ -308,7 +309,7 @@ async def initialize_session(openai_ws):
             "voice": VOICE,
             "instructions": SYSTEM_MESSAGE,
             "modalities": ["text", "audio"],
-            "temperature": 0.0,
+            "temperature": 0.6,
         }
     }
     print(f'Using voice: {VOICE}')
