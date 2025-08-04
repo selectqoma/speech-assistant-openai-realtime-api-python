@@ -73,6 +73,31 @@
             animation: pulse 1.5s infinite;
         }
 
+        .record-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px 0;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .record-button:hover {
+            background: #218838;
+            transform: scale(1.05);
+        }
+
+        .record-button.recording {
+            background: #dc3545;
+            animation: pulse 1.5s infinite;
+        }
+
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
@@ -190,6 +215,10 @@
         
         <button id="micButton" class="mic-button" disabled title="Click to start / stop recording">
             🎤
+        </button>
+        
+        <button id="recordButton" class="record-button" title="Record the entire conversation">
+            🎙️ Record Conversation
         </button>
     </div>
 

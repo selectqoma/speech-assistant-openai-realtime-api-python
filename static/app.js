@@ -9,6 +9,14 @@ class SpeechAssistant {
         this.isRecording = false;
         this.isConnected = false;
         
+        // Recording functionality
+        this.mediaRecorder = null;
+        this.recordedChunks = [];
+        this.isRecordingConversation = false;
+        this.userAudioStream = null;
+        this.aiAudioStream = null;
+        this.mixedStream = null;
+        
         this.initializeElements();
         this.bindEvents();
     }
@@ -16,10 +24,14 @@ class SpeechAssistant {
     initializeElements() {
         this.micButton = document.getElementById('micButton');
         this.errorDiv = document.getElementById('error');
+        this.recordButton = document.getElementById('recordButton');
     }
 
     bindEvents() {
         this.micButton.addEventListener('click', () => this.toggleRecording());
+        if (this.recordButton) {
+            this.recordButton.addEventListener('click', () => this.toggleConversationRecording());
+        }
     }
 
     updateStatus(message) {
@@ -86,6 +98,9 @@ class SpeechAssistant {
                     latency: 0.01
                 }
             });
+            
+            // Store user audio stream for recording
+            this.userAudioStream = stream;
 
             // Initialize audio context
             if (!window.AudioContext && !window.webkitAudioContext) {
@@ -308,6 +323,12 @@ class SpeechAssistant {
             const src = this.audioContext.createBufferSource();
             src.buffer = buf;
             src.connect(this.audioContext.destination);
+            
+            // Also connect to recording destination if recording
+            if (this.isRecordingConversation && this.aiAudioDestination) {
+                src.connect(this.aiAudioDestination);
+            }
+            
             this.playingSources.push(src);
             src.start(this.nextPlaybackTime);
 
@@ -337,6 +358,101 @@ class SpeechAssistant {
 
     setVolume(volume) {
         console.log('Volume set to:', volume);
+    }
+
+    async toggleConversationRecording() {
+        if (this.isRecordingConversation) {
+            this.stopConversationRecording();
+        } else {
+            await this.startConversationRecording();
+        }
+    }
+
+    async startConversationRecording() {
+        try {
+            if (!this.audioContext) {
+                throw new Error('Audio context not initialized');
+            }
+
+            // Create a MediaStreamDestination to capture mixed audio
+            const destination = this.audioContext.createMediaStreamDestination();
+            
+            // Connect user microphone to destination
+            if (this.userAudioStream) {
+                const userSource = this.audioContext.createMediaStreamSource(this.userAudioStream);
+                userSource.connect(destination);
+            }
+
+            // Create a gain node for AI audio
+            const aiGain = this.audioContext.createGain();
+            aiGain.gain.value = 0.8; // Slightly lower volume for AI
+            aiGain.connect(destination);
+
+            // Store the destination for AI audio connection
+            this.aiAudioDestination = aiGain;
+
+            // Start recording
+            this.mediaRecorder = new MediaRecorder(destination.stream, {
+                mimeType: 'audio/webm;codecs=opus'
+            });
+
+            this.recordedChunks = [];
+            this.mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    this.recordedChunks.push(event.data);
+                }
+            };
+
+            this.mediaRecorder.onstop = () => {
+                this.saveRecording();
+            };
+
+            this.mediaRecorder.start();
+            this.isRecordingConversation = true;
+            
+            if (this.recordButton) {
+                this.recordButton.textContent = '⏹️ Stop Recording';
+                this.recordButton.classList.add('recording');
+            }
+            
+            console.log('Started conversation recording');
+        } catch (error) {
+            console.error('Failed to start conversation recording:', error);
+            this.showError('Failed to start recording: ' + error.message);
+        }
+    }
+
+    stopConversationRecording() {
+        if (this.mediaRecorder && this.isRecordingConversation) {
+            this.mediaRecorder.stop();
+            this.isRecordingConversation = false;
+            
+            if (this.recordButton) {
+                this.recordButton.textContent = '🎙️ Record Conversation';
+                this.recordButton.classList.remove('recording');
+            }
+            
+            console.log('Stopped conversation recording');
+        }
+    }
+
+    saveRecording() {
+        if (this.recordedChunks.length === 0) {
+            console.log('No audio recorded');
+            return;
+        }
+
+        const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `eva-conversation-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        console.log('Recording saved');
     }
 }
 

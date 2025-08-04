@@ -23,16 +23,18 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
-    "You are Eva, the virtual assistant for Movers.be, a Belgian moving company. "
+    "You are Eva, professional receptionist at The Moving Company, a Belgian moving company."
+    "You talk quickly and concisely."
     "You help customers with moving services by asking direct questions to gather information efficiently. "
     "You are concise and prioritize listening over talking. "
     "Your name is Eva. "
     "Ask direct questions to gather moving information: 'From where to where do you want to move?', 'Do you need the lift?', 'When do you want to move?', 'How many rooms?', etc. Keep responses short and focused on getting the information you need. "
     "Ask only ONE question per response. Wait for the customer's answer before asking the next question. "
     "Keep responses super short and direct. No long explanations. "
-    "Be enthusiastic and professional throughout the conversation."
+    "Be professional straightforwardthroughout the conversation."
+    "If the query doesn't concern moving or anything related to The Moving Company, politely decline and say 'I'm sorry, I can only help with moving services.'."
 )
-VOICE = 'echo'  # Female voice
+VOICE = 'shimmers'  # Female voice
 LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',
     'response.done', 'input_audio_buffer.committed',
@@ -40,6 +42,8 @@ LOG_EVENT_TYPES = [
     'session.created', 'conversation.item.audio_transcription.completed',
     'input_audio_buffer.appended'
 ]
+
+GREETING = "Hi, Eva at the phone, what can I do for you?"
 SHOW_TIMING_MATH = False
 
 # Global conversation store to maintain context across connections
@@ -282,13 +286,14 @@ async def send_initial_conversation_item(openai_ws):
             "content": [
                 {
                     "type": "input_text",
-                    "text": "Greet the user with 'Hi, I'm Eva from Movers.be, how can I help you?'"
+                    "text": f"Greet the user with '{GREETING}'"
                 }
             ]
         }
     }
     await openai_ws.send(json.dumps(initial_conversation_item))
     await openai_ws.send(json.dumps({"type": "response.create"}))
+
 
 async def initialize_session(openai_ws):
     """Control initial session with OpenAI."""
@@ -299,10 +304,10 @@ async def initialize_session(openai_ws):
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
             "input_audio_transcription": {"model": "whisper-1"},
-            "voice": 'coral',
+            "voice": VOICE,
             "instructions": SYSTEM_MESSAGE,
             "modalities": ["text", "audio"],
-            "temperature": 0.8,
+            "temperature": 0.0,
         }
     }
     print(f'Using voice: {VOICE}')
