@@ -1,0 +1,6 @@
+Call started at: 2025-08-04T17:19:27.263052
+==================================================
+
+[2025-08-04T17:19:47.324837] ASSISTANT: Hi, I'm Eva from Movers.be, how can I help you?
+[2025-08-04T17:19:49.431961] USER: I'm sorry.
+[2025-08-04T17:19:49.511238] ASSISTANT: From where to where do you want to move?

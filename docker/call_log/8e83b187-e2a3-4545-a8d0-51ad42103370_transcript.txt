@@ -1,0 +1,23 @@
+Call started at: 2025-08-04T17:22:23.087425
+==================================================
+
+[2025-08-04T17:22:25.527384] ASSISTANT: Hi, I'm Eva from Movers.be, how can I help you?
+[2025-08-04T17:22:40.073290] USER: Eva, hi. Look, I would like to plan a move, but I sort of want to know the prize beforehand.
+[2025-08-04T17:22:40.426402] ASSISTANT: I understand. To give you an accurate quote, I need some details. From where to where do you want to move?
+[2025-08-04T17:22:53.652932] ASSISTANT: Great. When do you want to move?
+[2025-08-04T17:22:53.854906] USER: Well, actually from Brussels, Belgium to Paris.
+[2025-08-04T17:23:03.307220] USER: Well, next week, I don't know, Thursday or Friday, depends on you guys.
+[2025-08-04T17:23:04.709758] ASSISTANT: Understood. How many rooms are you moving?
+[2025-08-04T17:23:14.226977] ASSISTANT: Got it. Do you need a lift for any heavy items?
+[2025-08-04T17:23:14.840477] USER: Well, it's a huge house, it's actually a two-story house.
+[2025-08-04T17:23:22.099993] USER: Well, what do you think? It's a huge house.
+[2025-08-04T17:23:23.101492] ASSISTANT: Yes, a lift would be recommended. Finally, can I have your name and phone number to prepare the quote?
+[2025-08-04T17:23:41.029992] ASSISTANT: Thank you, Vlad. I'll use the number you're calling from. We'll get back to you soon with a quote.
+[2025-08-04T17:23:41.360154] USER: My name is Vlad, and my phone number, you should probably be able to guess it, right? As I'm calling from it.
+[2025-08-04T17:23:49.021963] USER: How soon?
+[2025-08-04T17:23:49.955079] ASSISTANT: We'll aim to get back to you within 24 hours.
+[2025-08-04T17:23:59.083741] USER: Yeah, could I could I speak to a person maybe?
+[2025-08-04T17:23:59.767602] ASSISTANT: I'm sorry, I can only assist with moving services. Our team will contact you soon. Thank you!
+[2025-08-04T17:24:06.104063] USER: And it's.
+[2025-08-04T17:24:09.912699] USER: Is anyone from the team available right now?
+[2025-08-04T17:24:10.794998] ASSISTANT: Currently, I'm the only one available to assist. Our team will reach out to you as soon as possible. Thank you for your understanding.
