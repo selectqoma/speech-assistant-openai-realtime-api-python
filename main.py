@@ -111,6 +111,8 @@ async def get_moving_requests():
 async def get_moving_request(request_id: str):
     """Get a specific moving request."""
     from moving_agent import moving_agent
+    from fastapi import HTTPException
+    
     request = moving_agent.get_current_request(request_id)
     if request:
         return asdict(request)
@@ -120,7 +122,7 @@ async def get_moving_request(request_id: str):
         if request:
             return asdict(request)
         else:
-            return {"error": "Request not found"}, 404
+            raise HTTPException(status_code=404, detail="Request not found")
 
 @app.websocket("/ws")
 async def handle_websocket(websocket: WebSocket):
@@ -137,6 +139,7 @@ async def handle_websocket(websocket: WebSocket):
     
     # Connection specific state
     conversation_started = False  # THIS IS PER CONNECTION
+    has_sent_greeting = False  # Track if greeting has been sent for this connection
     last_assistant_item_id = None  # Track the last assistant response for threading
     message_history = []  # Track conversation history (system message sent via session.update)
     waiting_for_response = False  # Track if we're waiting for an AI response
@@ -177,7 +180,7 @@ async def handle_websocket(websocket: WebSocket):
                         print(f"Received audio chunk: {len(data['audio'])} chars")
                         await openai_ws.send(json.dumps(audio_append))
                         audio_chunks_since_commit += 1
-                        audio_appended = False  # Reset flag until we get confirmation
+                        # Note: audio_appended flag is set in the 'append' ack handler only
                         print(f"Appended audio chunk {audio_chunks_since_commit}")
                         
                         # Commit after accumulating enough audio and getting confirmation
@@ -195,9 +198,13 @@ async def handle_websocket(websocket: WebSocket):
                         audio_appended = False
                         # Don't reset last_assistant_item to maintain conversation context
                         
-                        # Send initial conversation trigger to start the greeting
-                        print("Sending initial conversation trigger for greeting")
-                        await send_initial_conversation_item(openai_ws)
+                        # Send initial conversation trigger only if greeting hasn't been sent
+                        if not has_sent_greeting:
+                            print("Sending initial conversation trigger for greeting")
+                            await send_initial_conversation_item(openai_ws)
+                            has_sent_greeting = True
+                        else:
+                            print("Greeting already sent, skipping initial trigger")
                         
                         # Let server VAD handle all responses automatically
                         print("Audio session started - server VAD will handle responses")
@@ -307,12 +314,9 @@ async def handle_websocket(websocket: WebSocket):
                             transcript = response.get('transcript', '')
                             if transcript.strip():
                                 print(f"Transcription completed: '{transcript}'")
-                                if waiting_for_response:
-                                    print("[IGNORED] Still waiting for assistant reply to finish. Please wait.")
-                                elif not last_assistant_item_id:
-                                    print("[IGNORED] No assistant reply yet (no parent_id). Waiting for greeting to finish.")
-                                else:
-                                    await create_threaded_conversation_item(openai_ws, transcript, last_assistant_item_id)
+                                # The server already created the user item & queued a response.
+                                # No need to manually create another conversation item.
+                                pass
                                 
                     except json.JSONDecodeError as e:
                         print(f"Failed to parse OpenAI message: {e}")
@@ -360,6 +364,10 @@ async def handle_websocket(websocket: WebSocket):
             
             await openai_ws.send(json.dumps(conversation_item))
             print(f"Sent conversation item: '{transcript}'")
+            
+            # Text input needs an explicit response trigger
+            await openai_ws.send(json.dumps({"type": "response.create"}))
+            print("Sent response.create for text input")
 
         await asyncio.gather(receive_from_client(), send_to_client())
 
