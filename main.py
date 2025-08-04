@@ -23,7 +23,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 SYSTEM_MESSAGE = (
-    "You are Eva, professional receptionist at The Moving Company, a Belgian moving company."
+    "You are Eva, the receptionist at The Moving Company, a Belgian moving company."
     "You talk quickly and concisely."
     "You help customers with moving services by asking direct questions to gather information efficiently. "
     "You are concise and prioritize listening over talking. "
@@ -172,8 +172,17 @@ async def handle_websocket(websocket: WebSocket):
                         latest_media_timestamp = 0
                         last_assistant_item = None
                         
-                        # Uncomment the next line to have the AI speak first
-                        # await send_initial_conversation_item(openai_ws)
+                        # Have the AI speak first like in the example
+                        await send_initial_conversation_item(openai_ws)
+                    elif data['type'] == 'audio':
+                        print(f"Received audio chunk, length: {len(data.get('audio', ''))}")
+                        if openai_ws.state == State.OPEN:
+                            latest_media_timestamp = int(data.get('timestamp', 0))
+                            audio_append = {
+                                "type": "input_audio_buffer.append",
+                                "audio": data['audio']
+                            }
+                            await openai_ws.send(json.dumps(audio_append))
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
             except WebSocketDisconnect:
@@ -199,6 +208,7 @@ async def handle_websocket(websocket: WebSocket):
                                 response_start_timestamp = None
 
                         if response.get('type') == 'response.audio.delta' and 'delta' in response:
+                            print(f"Received audio delta, length: {len(response['delta'])}")
                             audio_delta = {
                                 "type": "audio",
                                 "audio": response['delta']
@@ -279,23 +289,22 @@ async def handle_websocket(websocket: WebSocket):
 
 async def send_initial_conversation_item(openai_ws):
     """Send initial conversation item if AI talks first."""
-    # Send a system message to trigger the greeting
-    system_message = {
+    initial_conversation_item = {
         "type": "conversation.item.create",
         "item": {
             "type": "message",
-            "role": "system",
+            "role": "user",
             "content": [
                 {
                     "type": "input_text",
-                    "text": "Greet the user now with your introduction."
+                    "text": "Greet the user with 'Hello there! I am an AI voice assistant powered by Twilio and the OpenAI Realtime API. You can ask me for facts, jokes, or anything you can imagine. How can I help you?'"
                 }
             ]
         }
     }
-    await openai_ws.send(json.dumps(system_message))
+    await openai_ws.send(json.dumps(initial_conversation_item))
     await openai_ws.send(json.dumps({"type": "response.create"}))
-    print("Sent system message to trigger greeting")
+    print("Sent initial conversation item to trigger greeting")
 
 
 async def initialize_session(openai_ws):
