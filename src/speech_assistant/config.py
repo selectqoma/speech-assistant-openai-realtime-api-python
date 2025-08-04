@@ -47,6 +47,6 @@ GREETING = "Hi, I'm Eva, how can I help you?"
 SHOW_TIMING_MATH = False
 
 # File Paths
-MOVING_REQUESTS_DIR = "moving_requests"
+CALL_LOG_DIR = "call_log"
 STATIC_DIR = "static"
 TEMPLATES_DIR = "templates" 

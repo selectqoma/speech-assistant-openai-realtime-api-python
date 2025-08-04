@@ -45,7 +45,7 @@ fi
 
 # Create necessary directories
 echo "Creating directories..."
-mkdir -p static templates moving_requests
+mkdir -p static templates call_log
 
 echo "✓ Setup complete!"
 echo ""

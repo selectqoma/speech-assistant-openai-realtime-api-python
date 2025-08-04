@@ -10,6 +10,5 @@ __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
 from .main import app
-from .moving_agent import moving_agent
 
-__all__ = ["app", "moving_agent"] 
+__all__ = ["app"] 

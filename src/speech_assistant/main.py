@@ -15,11 +15,7 @@ from .config import (
     OPENAI_API_KEY, PORT, SYSTEM_MESSAGE, VOICE, LOG_EVENT_TYPES,
     GREETING, SHOW_TIMING_MATH, STATIC_DIR, TEMPLATES_DIR
 )
-from .moving_agent import (
-    create_moving_request, save_client_name, save_move_date, 
-    save_locations, save_volume, save_floors, set_price_estimate,
-    set_requires_on_site_check, complete_request, get_current_request
-)
+# Moving agent functionality removed - will be replaced with call logging
 
 # Global conversation store to maintain context across connections
 conversation_store = {
@@ -64,32 +60,22 @@ async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "message": "Speech Assistant is running!"}
 
-@app.get("/moving-requests", response_class=JSONResponse)
-async def get_moving_requests():
-    """Get all moving requests."""
-    from moving_agent import moving_agent
-    requests = moving_agent.get_all_requests()
+@app.get("/call-logs", response_class=JSONResponse)
+async def get_call_logs():
+    """Get all call logs."""
+    # TODO: Implement call logging functionality
     return {
-        "active_requests": {req_id: asdict(req) for req_id, req in requests.items()},
-        "total_active": len(requests)
+        "message": "Call logging functionality coming soon",
+        "total_logs": 0
     }
 
-@app.get("/moving-requests/{request_id}", response_class=JSONResponse)
-async def get_moving_request(request_id: str):
-    """Get a specific moving request."""
-    from moving_agent import moving_agent
+@app.get("/call-logs/{log_id}", response_class=JSONResponse)
+async def get_call_log(log_id: str):
+    """Get a specific call log."""
     from fastapi import HTTPException
     
-    request = moving_agent.get_current_request(request_id)
-    if request:
-        return asdict(request)
-    else:
-        # Try to load from file
-        request = moving_agent.load_request_from_file(request_id)
-        if request:
-            return asdict(request)
-        else:
-            raise HTTPException(status_code=404, detail="Request not found")
+    # TODO: Implement call log retrieval
+    raise HTTPException(status_code=404, detail="Call logging not yet implemented")
 
 @app.websocket("/ws")
 async def handle_websocket(websocket: WebSocket):

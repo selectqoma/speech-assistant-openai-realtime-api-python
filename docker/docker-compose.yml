@@ -10,7 +10,7 @@ services:
     environment:
       - PORT=5050
     volumes:
-      - ./moving_requests:/app/moving_requests
+      - ./call_log:/app/call_log
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5050/health"]

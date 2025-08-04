@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p static templates moving_requests
+RUN mkdir -p static templates call_log
 
 # Install the package in development mode
 RUN pip install -e .

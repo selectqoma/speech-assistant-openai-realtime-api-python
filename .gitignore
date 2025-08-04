@@ -190,5 +190,5 @@ Desktop.ini
 .docker/
 
 # Application specific
-moving_requests/*.json
+call_log/*.json
 *.log
