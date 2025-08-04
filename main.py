@@ -35,7 +35,7 @@ SYSTEM_MESSAGE = (
     "If the query doesn't concern moving or anything related to The Moving Company, politely decline and say 'I'm sorry, I can only help with moving services.' "
     "Greet users with 'Hi, I'm Eva from Movers.be, how can I help you?'"
 )
-VOICE = 'shimmers'  # Female voice
+VOICE = 'shimmers'  
 LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',
     'response.done', 'input_audio_buffer.committed',
@@ -44,7 +44,7 @@ LOG_EVENT_TYPES = [
     'input_audio_buffer.appended'
 ]
 
-GREETING = "Hi, Eva at the phone, what can I do for you?"
+GREETING = "Hi, I'm Eva from Movers.be, how can I help you?"
 SHOW_TIMING_MATH = False
 
 # Global conversation store to maintain context across connections
@@ -172,8 +172,8 @@ async def handle_websocket(websocket: WebSocket):
                         latest_media_timestamp = 0
                         last_assistant_item = None
                         
-                        # Don't send initial conversation trigger - let the system message handle it
-                        # await send_initial_conversation_item(openai_ws)
+                        # Send initial conversation trigger to start with greeting
+                        await send_initial_conversation_item(openai_ws)
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
             except WebSocketDisconnect:
@@ -287,7 +287,7 @@ async def send_initial_conversation_item(openai_ws):
             "content": [
                 {
                     "type": "input_text",
-                    "text": f"Greet the user with '{GREETING}'"
+                    "text": "Hello"
                 }
             ]
         }
