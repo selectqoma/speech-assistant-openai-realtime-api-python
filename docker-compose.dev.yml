@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  speech-assistant:
+    build: .
+    ports:
+      - "5050:5050"
+    environment:
+      - PORT=5050
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - .:/app
+      - ./moving_requests:/app/moving_requests
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5050", "--reload"] 
