@@ -15,7 +15,7 @@ from .config import (
     OPENAI_API_KEY, PORT, SYSTEM_MESSAGE, VOICE, LOG_EVENT_TYPES,
     GREETING, SHOW_TIMING_MATH, STATIC_DIR, TEMPLATES_DIR
 )
-from .call_logger import call_logger
+from .simple_call_logger import simple_call_logger
 
 # Global conversation store to maintain context across connections
 conversation_store = {
@@ -66,8 +66,8 @@ async def get_call_logs():
     import os
     import glob
     
-    # Get all call log files
-    call_log_files = glob.glob(os.path.join(CALL_LOG_DIR, "*.json"))
+    # Get all complete call log files
+    call_log_files = glob.glob(os.path.join(CALL_LOG_DIR, "*_complete.json"))
     call_logs = []
     
     for file_path in call_log_files:
@@ -79,36 +79,33 @@ async def get_call_logs():
             print(f"Error loading call log {file_path}: {e}")
     
     # Add active calls
-    active_calls = call_logger.get_all_active_calls()
-    for call_id, call_log in active_calls.items():
-        call_logs.append(asdict(call_log))
+    active_call_ids = simple_call_logger.get_active_call_ids()
     
     return {
         "call_logs": call_logs,
         "total_logs": len(call_logs),
-        "active_calls": len(active_calls)
+        "active_calls": len(active_call_ids),
+        "active_call_ids": active_call_ids
     }
 
 @app.get("/call-logs/{log_id}", response_class=JSONResponse)
 async def get_call_log(log_id: str):
     """Get a specific call log."""
-    # Try to get active call first
-    active_call = call_logger.get_active_call(log_id)
-    if active_call:
-        return asdict(active_call)
+    import os
     
     # Try to load from file
-    call_log = call_logger.load_call_log(log_id)
-    if call_log:
-        return asdict(call_log)
+    call_log_file = os.path.join(CALL_LOG_DIR, f"{log_id}_complete.json")
+    if os.path.exists(call_log_file):
+        with open(call_log_file, 'r') as f:
+            return json.load(f)
     
     raise HTTPException(status_code=404, detail="Call log not found")
 
 @app.post("/call-logs/{log_id}/end", response_class=JSONResponse)
 async def end_call(log_id: str):
     """End a call and generate summary."""
-    summary = await call_logger.end_call(log_id)
-    if summary is None:
+    summary = await simple_call_logger.end_call_and_summarize(log_id)
+    if summary == "Call not found":
         raise HTTPException(status_code=404, detail="Call not found")
     
     return {
@@ -120,13 +117,13 @@ async def end_call(log_id: str):
 @app.post("/end-current-call", response_class=JSONResponse)
 async def end_current_call():
     """End the most recent active call (for testing)."""
-    active_calls = call_logger.get_all_active_calls()
-    if not active_calls:
+    active_call_ids = simple_call_logger.get_active_call_ids()
+    if not active_call_ids:
         raise HTTPException(status_code=404, detail="No active calls found")
     
     # Get the most recent call
-    call_id = list(active_calls.keys())[-1]
-    summary = await call_logger.end_call(call_id)
+    call_id = active_call_ids[-1]
+    summary = await simple_call_logger.end_call_and_summarize(call_id)
     
     return {
         "message": "Current call ended successfully",
@@ -141,8 +138,7 @@ async def handle_websocket(websocket: WebSocket):
     await websocket.accept()
 
     # Start call logging
-    call_log = call_logger.start_call()
-    call_id = call_log.id
+    call_id = simple_call_logger.start_call()
     print(f"Started call logging with ID: {call_id}")
 
     # Create connection with proper headers
@@ -258,11 +254,10 @@ async def handle_websocket(websocket: WebSocket):
                             if full_transcript.strip():
                                 print(f"Assistant response transcript: '{full_transcript}'")
                                 # Log assistant transcript
-                                call_logger.add_transcript_entry(
+                                simple_call_logger.add_transcript_entry(
                                     call_id, 
                                     "assistant", 
-                                    full_transcript, 
-                                    latest_media_timestamp
+                                    full_transcript
                                 )
 
                         # Handle interruption when user starts speaking
@@ -281,11 +276,10 @@ async def handle_websocket(websocket: WebSocket):
                             if transcript.strip():
                                 print(f"Transcription completed: '{transcript}'")
                                 # Log user transcript
-                                call_logger.add_transcript_entry(
+                                simple_call_logger.add_transcript_entry(
                                     call_id, 
                                     "user", 
-                                    transcript, 
-                                    latest_media_timestamp
+                                    transcript
                                 )
                                 
                     except json.JSONDecodeError as e:
@@ -344,7 +338,7 @@ async def handle_websocket(websocket: WebSocket):
             if call_id:
                 print(f"Auto-ending call {call_id}")
                 try:
-                    summary = await call_logger.end_call(call_id)
+                    summary = await simple_call_logger.end_call_and_summarize(call_id)
                     print(f"Call auto-ended with summary: {summary}")
                 except Exception as e:
                     print(f"Error auto-ending call: {e}")
