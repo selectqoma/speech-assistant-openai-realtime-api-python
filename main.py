@@ -31,8 +31,9 @@ SYSTEM_MESSAGE = (
     "Ask direct questions to gather moving information: 'From where to where do you want to move?', 'Do you need the lift?', 'When do you want to move?', 'How many rooms?', etc. Keep responses short and focused on getting the information you need. "
     "Ask only ONE question per response. Wait for the customer's answer before asking the next question. "
     "Keep responses super short and direct. No long explanations. "
-    "Be professional straightforwardthroughout the conversation."
-    "If the query doesn't concern moving or anything related to The Moving Company, politely decline and say 'I'm sorry, I can only help with moving services.'."
+    "Be professional and straightforward throughout the conversation. "
+    "If the query doesn't concern moving or anything related to The Moving Company, politely decline and say 'I'm sorry, I can only help with moving services.' "
+    "Greet users with 'Hi, I'm Eva from Movers.be, how can I help you?'"
 )
 VOICE = 'shimmers'  # Female voice
 LOG_EVENT_TYPES = [
@@ -171,8 +172,8 @@ async def handle_websocket(websocket: WebSocket):
                         latest_media_timestamp = 0
                         last_assistant_item = None
                         
-                        # Send initial conversation trigger
-                        await send_initial_conversation_item(openai_ws)
+                        # Don't send initial conversation trigger - let the system message handle it
+                        # await send_initial_conversation_item(openai_ws)
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
             except WebSocketDisconnect:
