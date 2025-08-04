@@ -172,8 +172,8 @@ async def handle_websocket(websocket: WebSocket):
                         latest_media_timestamp = 0
                         last_assistant_item = None
                         
-                        # Send initial conversation trigger to start with greeting
-                        await send_initial_conversation_item(openai_ws)
+                        # Uncomment the next line to have the AI speak first
+                        # await send_initial_conversation_item(openai_ws)
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
             except WebSocketDisconnect:
