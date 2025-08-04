@@ -119,6 +119,23 @@ async def end_call(log_id: str):
         "call_id": log_id
     }
 
+@app.post("/end-current-call", response_class=JSONResponse)
+async def end_current_call():
+    """End the most recent active call (for testing)."""
+    active_calls = call_logger.get_all_active_calls()
+    if not active_calls:
+        raise HTTPException(status_code=404, detail="No active calls found")
+    
+    # Get the most recent call
+    call_id = list(active_calls.keys())[-1]
+    summary = await call_logger.end_call(call_id)
+    
+    return {
+        "message": "Current call ended successfully",
+        "summary": summary,
+        "call_id": call_id
+    }
+
 @app.websocket("/ws")
 async def handle_websocket(websocket: WebSocket):
     """Handle WebSocket connections for local speech assistant."""
@@ -320,7 +337,19 @@ async def handle_websocket(websocket: WebSocket):
             await openai_ws.send(json.dumps({"type": "response.create"}))
             print("Sent response.create for text input")
 
-        await asyncio.gather(receive_from_client(), send_to_client())
+        try:
+            await asyncio.gather(receive_from_client(), send_to_client())
+        except Exception as e:
+            print(f"WebSocket error: {e}")
+        finally:
+            # Auto-save call when connection ends
+            if call_id:
+                print(f"Auto-ending call {call_id}")
+                try:
+                    summary = await call_logger.end_call(call_id)
+                    print(f"Call auto-ended with summary: {summary}")
+                except Exception as e:
+                    print(f"Error auto-ending call: {e}")
 
 async def send_initial_conversation_item(openai_ws):
     """Send initial conversation item if AI talks first."""
