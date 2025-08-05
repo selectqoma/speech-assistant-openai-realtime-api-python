@@ -372,7 +372,7 @@ async def initialize_session(openai_ws):
         "session": {
             "turn_detection": {
                 "type": "server_vad",
-                "silence_duration_ms": 1000  # Wait 1 second of silence before assistant speaks
+                "silence_duration_ms": 500  # Wait 0.5 seconds of silence before assistant speaks
             },
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
