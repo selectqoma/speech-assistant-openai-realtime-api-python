@@ -1,0 +1,19 @@
+Call started at: 2025-08-05T07:52:21.927897
+==================================================
+
+[2025-08-05T07:52:28.659738] ASSISTANT: Hi, I'm Eva from Movers.be, how can I help you?
+[2025-08-05T07:52:36.927428] ASSISTANT: Great, from where to where do you want to move?
+[2025-08-05T07:52:36.992781] USER: I would like to move somewhere next week.
+[2025-08-05T07:52:43.351075] USER: from Brussels to Antwerp.
+[2025-08-05T07:52:43.573777] ASSISTANT: Got it. Do you need a lift for your move?
+[2025-08-05T07:52:54.356618] USER: Well, I don't know if my sofa is going to fit through the stairs. How much is the lift?
+[2025-08-05T07:52:55.089513] ASSISTANT: The lift costs an additional 150 euros. How many rooms are you moving?
+[2025-08-05T07:53:01.575008] USER: and
+[2025-08-05T07:53:01.928682] ASSISTANT: Understood. When exactly next week do
+[2025-08-05T07:53:03.110292] ASSISTANT: Perfect. May I have your name and phone number, please?
+[2025-08-05T07:53:03.554808] USER: It was fun.
+[2025-08-05T07:53:04.041434] USER: 好
+[2025-08-05T07:53:04.143006] ASSISTANT: Thank you! We'll be in touch soon.
+[2025-08-05T07:53:05.673588] USER: I have.
+[2025-08-05T07:53:07.078530] USER: What the fuck?
+[2025-08-05T07:53:07.695717] ASSISTANT: I'm sorry, I can only help with moving services. Is there anything else related to your move?

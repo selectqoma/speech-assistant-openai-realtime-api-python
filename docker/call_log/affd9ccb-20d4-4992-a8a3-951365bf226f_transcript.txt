@@ -1,0 +1,24 @@
+Call started at: 2025-08-05T07:50:48.808643
+==================================================
+
+[2025-08-05T07:50:51.200626] ASSISTANT: Hi, I'm Eva from Movers.be, how can I help you?
+[2025-08-05T07:50:59.472771] USER: Hi Eva, would you like to organize a move somewhere next week?
+[2025-08-05T07:50:59.618276] ASSISTANT: Great! From where to where do you want to move?
+[2025-08-05T07:51:04.914024] USER: Um...
+[2025-08-05T07:51:08.304395] USER: and moving from Brussels to its outskirts.
+[2025-08-05T07:51:08.331148] ASSISTANT: Understood. Do you need a lift for your move?
+[2025-08-05T07:51:18.053171] USER: Well, I'm not really sure that I need a lift. How do I know?
+[2025-08-05T07:51:18.452106] ASSISTANT: If you have heavy or large items that won't fit through the stairs, a lift can be useful. How many rooms are you moving?
+[2025-08-05T07:51:33.629299] USER: Well, about the lift, I have quite a big sofa, so I suppose it's...
+[2025-08-05T07:51:34.651135] USER: still the necessary.
+[2025-08-05T07:51:35.229562] ASSISTANT: Got it. When would you like to schedule your move?
+[2025-08-05T07:51:43.976409] USER: Well, what are your availabilities next week?
+[2025-08-05T07:51:45.380073] ASSISTANT: We have some slots open next week. Can you provide your name and phone number to check the exact availability?
+[2025-08-05T07:52:00.906248] USER: Hi, my name is Dimitri and my phone number is 456-5684...
+[2025-08-05T07:52:01.487023] USER: 8-4.
+[2025-08-05T07:52:03.079986] ASSISTANT: Thank you, Dimitri. I'll check our availability and get back to you shortly. Is there anything else you need help with?
+[2025-08-05T07:52:14.301924] USER: No, not now. Thanks.
+[2025-08-05T07:52:15.461568] ASSISTANT: Alright, Dimitri. We'll be in touch. Have a great day!
+[2025-08-05T07:52:15.515849] USER: Thanks for watching. 
+[2025-08-05T07:52:19.490360] USER: Yeah
+[2025-08-05T07:52:19.690752] ASSISTANT: Hi, I'm Eva from Movers.be, how can I help you?
