@@ -159,7 +159,7 @@ async def handle_websocket(websocket: WebSocket):
     last_tts_sent_at = 0.0  # Track when we last sent TTS to client
     client_recording = False  # Track if client is currently recording
     current_response_id = None  # Track current response ID
-    audio_buffer_duration = 0.0  # Track audio buffer duration in seconds
+    audio_chunks_received = 0  # Track number of audio chunks received
     
     # Use global conversation store
     global conversation_store
@@ -171,24 +171,14 @@ async def handle_websocket(websocket: WebSocket):
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp, client_recording, audio_buffer_duration
+            nonlocal latest_media_timestamp, client_recording, audio_chunks_received
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
                     if data['type'] == 'audio' and openai_ws.state == State.OPEN:
                         latest_media_timestamp = int(data.get('timestamp', 0))
-                        # Estimate audio duration (assuming 16kHz, 16-bit, mono)
-                        # Each audio chunk is base64 encoded PCM16 data
-                        try:
-                            audio_bytes = len(base64.b64decode(data['audio']))
-                            audio_samples = audio_bytes // 2  # 16-bit = 2 bytes per sample
-                            audio_duration = audio_samples / 16000.0  # 16kHz sample rate
-                            audio_buffer_duration += audio_duration
-                            print(f"Audio chunk: {audio_bytes} bytes, {audio_samples} samples, {audio_duration:.3f}s duration, total buffer: {audio_buffer_duration:.3f}s")
-                        except Exception as e:
-                            print(f"Error calculating audio duration: {e}")
-                            # Fallback: assume some minimum duration
-                            audio_buffer_duration += 0.01  # 10ms fallback
+                        audio_chunks_received += 1
+                        print(f"Received audio chunk #{audio_chunks_received}")
                         
                         audio_append = {
                             "type": "input_audio_buffer.append",
@@ -199,7 +189,7 @@ async def handle_websocket(websocket: WebSocket):
                     elif data['type'] == 'start':
                         print("Audio session started")
                         client_recording = True
-                        audio_buffer_duration = 0.0  # Reset audio buffer duration
+                        audio_chunks_received = 0  # Reset audio chunks counter
                         response_start_timestamp = None
                         latest_media_timestamp = 0
                         last_assistant_item = None
@@ -209,15 +199,15 @@ async def handle_websocket(websocket: WebSocket):
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
                         client_recording = False
-                        # Only commit if we have at least 100ms of audio data
-                        min_audio_duration = 0.1  # 100ms minimum
-                        print(f"Stop requested - current audio buffer duration: {audio_buffer_duration:.3f}s")
-                        if openai_ws.state == State.OPEN and audio_buffer_duration >= min_audio_duration:
+                        # Only commit if we have received at least 3 audio chunks
+                        min_chunks = 3
+                        print(f"Stop requested - received {audio_chunks_received} audio chunks")
+                        if openai_ws.state == State.OPEN and audio_chunks_received >= min_chunks:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-                            print(f"Sent input_audio_buffer.commit (duration: {audio_buffer_duration:.3f}s)")
-                            audio_buffer_duration = 0.0  # Reset duration after committing
+                            print(f"Sent input_audio_buffer.commit ({audio_chunks_received} chunks)")
+                            audio_chunks_received = 0  # Reset counter after committing
                         else:
-                            print(f"No sufficient audio data to commit (duration: {audio_buffer_duration:.3f}s), skipping commit")
+                            print(f"Not enough audio chunks to commit ({audio_chunks_received} < {min_chunks}), skipping commit")
             except WebSocketDisconnect:
                 print("Client disconnected.")
                 if openai_ws.state != State.CLOSED:
