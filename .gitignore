@@ -190,5 +190,6 @@ Desktop.ini
 .docker/
 
 # Application specific
-call_log/*.json
+call_log/
+docker/call_log/
 *.log
