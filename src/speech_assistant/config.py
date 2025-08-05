@@ -17,7 +17,7 @@ PORT = int(os.getenv('PORT', 5050))
 HOST = os.getenv('HOST', '0.0.0.0')
 
 # Voice Configuration
-VOICE = 'echo'
+VOICE = 'onyx'
 
 # System Message
 SYSTEM_MESSAGE = (
