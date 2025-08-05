@@ -179,10 +179,16 @@ async def handle_websocket(websocket: WebSocket):
                         latest_media_timestamp = int(data.get('timestamp', 0))
                         # Estimate audio duration (assuming 16kHz, 16-bit, mono)
                         # Each audio chunk is base64 encoded PCM16 data
-                        audio_bytes = len(base64.b64decode(data['audio']))
-                        audio_samples = audio_bytes // 2  # 16-bit = 2 bytes per sample
-                        audio_duration = audio_samples / 16000.0  # 16kHz sample rate
-                        audio_buffer_duration += audio_duration
+                        try:
+                            audio_bytes = len(base64.b64decode(data['audio']))
+                            audio_samples = audio_bytes // 2  # 16-bit = 2 bytes per sample
+                            audio_duration = audio_samples / 16000.0  # 16kHz sample rate
+                            audio_buffer_duration += audio_duration
+                            print(f"Audio chunk: {audio_bytes} bytes, {audio_samples} samples, {audio_duration:.3f}s duration, total buffer: {audio_buffer_duration:.3f}s")
+                        except Exception as e:
+                            print(f"Error calculating audio duration: {e}")
+                            # Fallback: assume some minimum duration
+                            audio_buffer_duration += 0.01  # 10ms fallback
                         
                         audio_append = {
                             "type": "input_audio_buffer.append",
@@ -205,6 +211,7 @@ async def handle_websocket(websocket: WebSocket):
                         client_recording = False
                         # Only commit if we have at least 100ms of audio data
                         min_audio_duration = 0.1  # 100ms minimum
+                        print(f"Stop requested - current audio buffer duration: {audio_buffer_duration:.3f}s")
                         if openai_ws.state == State.OPEN and audio_buffer_duration >= min_audio_duration:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
                             print(f"Sent input_audio_buffer.commit (duration: {audio_buffer_duration:.3f}s)")
@@ -394,7 +401,7 @@ async def initialize_session(openai_ws):
         "session": {
             "turn_detection": {
                 "type": "server_vad",
-                "silence_duration_ms": 800  # Wait 0.8 seconds of silence before assistant speaks
+                "silence_duration_ms": 200  
             },
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
