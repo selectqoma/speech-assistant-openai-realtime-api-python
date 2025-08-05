@@ -2,6 +2,7 @@ import os
 import json
 import base64
 import asyncio
+import time
 import websockets
 from websockets.asyncio.connection import State
 from fastapi import FastAPI, WebSocket, Request, HTTPException
@@ -155,6 +156,9 @@ async def handle_websocket(websocket: WebSocket):
     response_start_timestamp = None
     response_in_progress = False
     assistant_speaking = False  # Track if assistant is currently speaking
+    last_tts_sent_at = 0.0  # Track when we last sent TTS to client
+    client_recording = False  # Track if client is currently recording
+    current_response_id = None  # Track current response ID
     
     # Use global conversation store
     global conversation_store
@@ -166,7 +170,7 @@ async def handle_websocket(websocket: WebSocket):
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp
+            nonlocal latest_media_timestamp, client_recording
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
@@ -180,6 +184,7 @@ async def handle_websocket(websocket: WebSocket):
 
                     elif data['type'] == 'start':
                         print("Audio session started")
+                        client_recording = True
                         response_start_timestamp = None
                         latest_media_timestamp = 0
                         last_assistant_item = None
@@ -188,6 +193,7 @@ async def handle_websocket(websocket: WebSocket):
                         await send_initial_conversation_item(openai_ws)
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
+                        client_recording = False
                         # Send input_audio_buffer.end to signal user is done speaking
                         if openai_ws.state == State.OPEN:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.end"}))
@@ -199,7 +205,7 @@ async def handle_websocket(websocket: WebSocket):
 
         async def send_to_client():
             """Receive events from the OpenAI Realtime API, send audio back to client."""
-            nonlocal response_start_timestamp, last_assistant_item, assistant_speaking
+            nonlocal response_start_timestamp, last_assistant_item, assistant_speaking, last_tts_sent_at, current_response_id
             try:
                 async for openai_message in openai_ws:
                     try:
@@ -222,6 +228,7 @@ async def handle_websocket(websocket: WebSocket):
                                 "audio": response['delta']
                             }
                             await websocket.send_json(audio_delta)
+                            last_tts_sent_at = time.monotonic()  # Track when we sent TTS
 
                             if response_start_timestamp is None:
                                 response_start_timestamp = latest_media_timestamp
@@ -230,6 +237,7 @@ async def handle_websocket(websocket: WebSocket):
                             # Update last_assistant_item safely
                             if response.get('item_id'):
                                 last_assistant_item = response['item_id']
+                                current_response_id = response['item_id']
                         
                         # Handle assistant text responses for logging
                         if response.get('type') == 'response.audio_transcript.delta':
@@ -257,17 +265,18 @@ async def handle_websocket(websocket: WebSocket):
 
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
-                            print("Speech started detected.")
-                            # Only cancel if assistant is currently speaking
-                            if assistant_speaking and last_assistant_item:
-                                print(f"Interrupting assistant response with id: {last_assistant_item}")
+                            now = time.monotonic()
+                            # ignore echo while we're actively outputting TTS
+                            echo_window = 0.35  # 350ms works well; tune 300–500ms
+                            if client_recording and assistant_speaking and (now - last_tts_sent_at) > echo_window:
+                                print(f"User barged in; cancelling response {last_assistant_item or current_response_id}")
                                 await openai_ws.send(json.dumps({"type": "response.cancel"}))
                                 await websocket.send_json({"type": "clear"})
                                 last_assistant_item = None
                                 response_start_timestamp = None
                                 assistant_speaking = False
                             else:
-                                print("Speech started but assistant not speaking, ignoring")
+                                print("Speech started ignored (likely echo or not recording)")
                         
                         # Handle transcription completion
                         if response.get('type') == 'conversation.item.input_audio_transcription.completed':
@@ -372,7 +381,7 @@ async def initialize_session(openai_ws):
         "session": {
             "turn_detection": {
                 "type": "server_vad",
-                "silence_duration_ms": 200  # Wait 0.2 seconds of silence before assistant speaks
+                "silence_duration_ms": 800  # Wait 0.8 seconds of silence before assistant speaks
             },
             "input_audio_format": "pcm16",
             "output_audio_format": "pcm16",
