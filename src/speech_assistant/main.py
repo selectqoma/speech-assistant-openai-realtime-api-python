@@ -153,21 +153,16 @@ async def handle_websocket(websocket: WebSocket):
     last_assistant_item = None
     mark_queue = []
     response_start_timestamp = None
+    response_in_progress = False
+    assistant_speaking = False  # Track if assistant is currently speaking
+    
+    # Use global conversation store
+    global conversation_store
+    print(f"WebSocket connected.")
     
     async with websockets.connect(uri, additional_headers=headers) as openai_ws:
         await initialize_session(openai_ws)
         # Don't send initial trigger here - wait for user to start recording
-
-        # Connection specific state
-        latest_media_timestamp = 0
-        mark_queue = []
-        response_start_timestamp = None
-        response_in_progress = False
-        
-        # Use global conversation store
-        global conversation_store
-        print(f"WebSocket connected.")
-        
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
@@ -191,17 +186,12 @@ async def handle_websocket(websocket: WebSocket):
                         
                         # Have the AI speak first like in the example
                         await send_initial_conversation_item(openai_ws)
-                    elif data['type'] == 'audio':
-                        print(f"Received audio chunk, length: {len(data.get('audio', ''))}")
-                        if openai_ws.state == State.OPEN:
-                            latest_media_timestamp = int(data.get('timestamp', 0))
-                            audio_append = {
-                                "type": "input_audio_buffer.append",
-                                "audio": data['audio']
-                            }
-                            await openai_ws.send(json.dumps(audio_append))
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
+                        # Send input_audio_buffer.end to signal user is done speaking
+                        if openai_ws.state == State.OPEN:
+                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.end"}))
+                            print("Sent input_audio_buffer.end")
             except WebSocketDisconnect:
                 print("Client disconnected.")
                 if openai_ws.state != State.CLOSED:
@@ -209,7 +199,7 @@ async def handle_websocket(websocket: WebSocket):
 
         async def send_to_client():
             """Receive events from the OpenAI Realtime API, send audio back to client."""
-            nonlocal response_start_timestamp, last_assistant_item
+            nonlocal response_start_timestamp, last_assistant_item, assistant_speaking
             try:
                 async for openai_message in openai_ws:
                     try:
@@ -223,6 +213,7 @@ async def handle_websocket(websocket: WebSocket):
                             elif response['type'] == 'response.done':
                                 print(f"Response completed. Conversation ID: {response.get('response', {}).get('conversation_id', 'unknown')}")
                                 response_start_timestamp = None
+                                assistant_speaking = False  # Mark assistant as done speaking
 
                         if response.get('type') == 'response.audio.delta' and 'delta' in response:
                             print(f"Received audio delta, length: {len(response['delta'])}")
@@ -234,6 +225,7 @@ async def handle_websocket(websocket: WebSocket):
 
                             if response_start_timestamp is None:
                                 response_start_timestamp = latest_media_timestamp
+                                assistant_speaking = True  # Mark assistant as speaking
 
                             # Update last_assistant_item safely
                             if response.get('item_id'):
@@ -266,12 +258,16 @@ async def handle_websocket(websocket: WebSocket):
                         # Handle interruption when user starts speaking
                         if response.get('type') == 'input_audio_buffer.speech_started':
                             print("Speech started detected.")
-                            if last_assistant_item:
-                                print(f"Interrupting response with id: {last_assistant_item}")
+                            # Only cancel if assistant is currently speaking
+                            if assistant_speaking and last_assistant_item:
+                                print(f"Interrupting assistant response with id: {last_assistant_item}")
                                 await openai_ws.send(json.dumps({"type": "response.cancel"}))
                                 await websocket.send_json({"type": "clear"})
                                 last_assistant_item = None
                                 response_start_timestamp = None
+                                assistant_speaking = False
+                            else:
+                                print("Speech started but assistant not speaking, ignoring")
                         
                         # Handle transcription completion
                         if response.get('type') == 'conversation.item.input_audio_transcription.completed':
