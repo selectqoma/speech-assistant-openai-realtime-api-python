@@ -159,6 +159,7 @@ async def handle_websocket(websocket: WebSocket):
     last_tts_sent_at = 0.0  # Track when we last sent TTS to client
     client_recording = False  # Track if client is currently recording
     current_response_id = None  # Track current response ID
+    has_audio_data = False  # Track if we have audio data to commit
     
     # Use global conversation store
     global conversation_store
@@ -170,12 +171,13 @@ async def handle_websocket(websocket: WebSocket):
         
         async def receive_from_client():
             """Receive audio data from client and send it to the OpenAI Realtime API."""
-            nonlocal latest_media_timestamp, client_recording
+            nonlocal latest_media_timestamp, client_recording, has_audio_data
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
                     if data['type'] == 'audio' and openai_ws.state == State.OPEN:
                         latest_media_timestamp = int(data.get('timestamp', 0))
+                        has_audio_data = True  # Mark that we have audio data
                         audio_append = {
                             "type": "input_audio_buffer.append",
                             "audio": data['audio']
@@ -185,6 +187,7 @@ async def handle_websocket(websocket: WebSocket):
                     elif data['type'] == 'start':
                         print("Audio session started")
                         client_recording = True
+                        has_audio_data = False  # Reset audio data flag
                         response_start_timestamp = None
                         latest_media_timestamp = 0
                         last_assistant_item = None
@@ -194,10 +197,13 @@ async def handle_websocket(websocket: WebSocket):
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
                         client_recording = False
-                        # Send input_audio_buffer.commit to signal user is done speaking
-                        if openai_ws.state == State.OPEN:
+                        # Only commit if we have audio data to commit
+                        if openai_ws.state == State.OPEN and has_audio_data:
                             await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
                             print("Sent input_audio_buffer.commit")
+                            has_audio_data = False  # Reset flag after committing
+                        else:
+                            print("No audio data to commit, skipping commit")
             except WebSocketDisconnect:
                 print("Client disconnected.")
                 if openai_ws.state != State.CLOSED:
