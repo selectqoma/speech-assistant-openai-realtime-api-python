@@ -199,15 +199,9 @@ async def handle_websocket(websocket: WebSocket):
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
                         client_recording = False
-                        # Only commit if we have received at least 3 audio chunks
-                        min_chunks = 3
-                        print(f"Stop requested - received {audio_chunks_received} audio chunks")
-                        if openai_ws.state == State.OPEN and audio_chunks_received >= min_chunks:
-                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-                            print(f"Sent input_audio_buffer.commit ({audio_chunks_received} chunks)")
-                            audio_chunks_received = 0  # Reset counter after committing
-                        else:
-                            print(f"Not enough audio chunks to commit ({audio_chunks_received} < {min_chunks}), skipping commit")
+                        # Don't manually commit - let server VAD handle turn detection
+                        print(f"Stop requested - received {audio_chunks_received} audio chunks, letting server VAD handle turn detection")
+                        audio_chunks_received = 0  # Reset counter
             except WebSocketDisconnect:
                 print("Client disconnected.")
                 if openai_ws.state != State.CLOSED:
