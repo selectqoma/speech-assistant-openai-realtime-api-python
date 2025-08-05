@@ -194,10 +194,10 @@ async def handle_websocket(websocket: WebSocket):
                     elif data['type'] == 'stop':
                         print("Audio session stopped")
                         client_recording = False
-                        # Send input_audio_buffer.end to signal user is done speaking
+                        # Send input_audio_buffer.commit to signal user is done speaking
                         if openai_ws.state == State.OPEN:
-                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.end"}))
-                            print("Sent input_audio_buffer.end")
+                            await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
+                            print("Sent input_audio_buffer.commit")
             except WebSocketDisconnect:
                 print("Client disconnected.")
                 if openai_ws.state != State.CLOSED:
