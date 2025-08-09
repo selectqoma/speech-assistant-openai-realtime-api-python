@@ -64,3 +64,11 @@ MAX_TOKENS_STRUCTURED = 150  # Limit token usage
 CALL_LOG_DIR = "call_log"
 STATIC_DIR = "static"
 TEMPLATES_DIR = "templates" 
+
+# WhatsApp Cloud API Configuration
+# These are optional and only needed if you enable the WhatsApp webhook routes
+WA_TOKEN = os.getenv('WA_TOKEN', '')
+WA_PHONE_ID = os.getenv('WA_PHONE_ID', '')
+WA_VERIFY_TOKEN = os.getenv('WA_VERIFY_TOKEN', '')
+WA_GRAPH_VERSION = os.getenv('WA_GRAPH_VERSION', 'v20.0')
+WA_BASE_URL = f"https://graph.facebook.com/{WA_GRAPH_VERSION}"

@@ -1,104 +1,185 @@
-# AI Speech Assistant with OpenAI Realtime API (Python)
+# Speech Assistant with OpenAI Realtime API
 
-This application demonstrates how to use Python, FastAPI, and [OpenAI's Realtime API](https://platform.openai.com/docs/) to create a local web-based speech assistant that runs entirely in your browser.
-
-The application opens a WebSocket connection with the OpenAI Realtime API and handles real-time audio streaming between your microphone and the AI assistant, enabling a two-way conversation without requiring any external services like Twilio.
+A real-time speech assistant built with FastAPI and OpenAI's Realtime API, designed for a moving company receptionist named Eva.
 
 ## Features
 
-- **Local Web Interface**: Beautiful, modern UI that runs entirely in your browser
-- **Real-time Speech**: Instant voice interaction with the AI assistant
-- **Interruption Handling**: The AI can be interrupted when you start speaking
-- **Volume Control**: Adjustable audio output volume
-- **Cross-platform**: Works on any modern browser with microphone support
+- Real-time speech-to-speech conversation
+- WebSocket-based communication
+- Real-time call transcription
+- Automatic call summarization with LLM
+- Professional receptionist AI (Eva)
+- Containerized deployment
 
 ## Prerequisites
 
-To use the app, you will need:
+- Docker and Docker Compose
+- OpenAI API key with access to the Realtime API
 
-- **Python 3.9+** We used `3.9.13` for development; download from [here](https://www.python.org/downloads/).
-- **An OpenAI account and an OpenAI API Key.** You can sign up [here](https://platform.openai.com/).
-  - **OpenAI Realtime API access.**
-- **A modern web browser** with microphone support (Chrome, Firefox, Safari, Edge)
+## Quick Start with Docker
 
-## Local Setup
+### 1. Set up environment variables
 
-### (Optional) Create and use a virtual environment
+Create a `.env` file in the project root:
 
-To reduce cluttering your global Python environment on your machine, you can create a virtual environment. On your command line, enter:
-
-```
-python3 -m venv env
-source env/bin/activate  # On Windows: env\Scripts\activate
+```bash
+OPENAI_API_KEY=your_openai_api_key_here
+PORT=5050
 ```
 
-### Install required packages
+The Docker setup will automatically load the `.env` file.
 
-In the terminal (with the virtual environment, if you set it up) run:
-```
-pip install -r requirements.txt
-```
+### 2. Build and run with Docker Compose
 
-### Update the .env file
-
-Create a `.env` file, or copy the `.env.example` file to `.env`:
-
-```
-cp .env.example .env
+For production:
+```bash
+docker-compose -f docker/docker-compose.yml up --build
 ```
 
-In the .env file, update the `OPENAI_API_KEY` to your OpenAI API key from the **Prerequisites**.
-
-## Run the app
-
-Once dependencies are installed and the `.env` is set up, run the development server with the following command:
-```
-python main.py
+For development (with hot reload):
+```bash
+docker-compose -f docker/docker-compose.dev.yml up --build
 ```
 
-The server will start on `http://localhost:5050` by default.
+### 3. Access the application
 
-## Test the app
+Open your browser and navigate to: `http://localhost:5050`
 
-1. Open your web browser and navigate to `http://localhost:5050`
-2. Click the "Connect" button to establish a connection with the AI assistant
-3. Grant microphone permissions when prompted
-4. Click the microphone button to start talking with the AI assistant
-5. Use the volume slider to adjust the AI's voice volume
+## Manual Docker Commands
 
-## How it works
+### Build the image
+```bash
+docker build -t speech-assistant docker/
+```
 
-1. **WebSocket Connection**: The browser establishes a WebSocket connection to the Python server
-2. **Audio Capture**: Your microphone audio is captured and converted to mu-law format
-3. **OpenAI Processing**: Audio is sent to OpenAI's Realtime API for processing
-4. **AI Response**: The AI generates a response and sends audio back
-5. **Audio Playback**: The response audio is converted and played through your speakers
+### Run the container
+```bash
+docker run -p 5050:5050 --env-file .env speech-assistant
+```
 
-## Special features
-
-### Have the AI speak first
-To have the AI voice assistant talk before the user, uncomment the line `# await send_initial_conversation_item(openai_ws)` in `main.py`. The initial greeting is controlled in `async def send_initial_conversation_item(openai_ws)`.
-
-### Interruption handling/AI preemption
-When the user speaks and OpenAI sends `input_audio_buffer.speech_started`, the code will clear the audio buffer and send OpenAI `conversation.item.truncate`.
-
-Depending on your application's needs, you may want to use the [`input_audio_buffer.speech_stopped`](https://platform.openai.com/docs/api-reference/realtime-server-events/input-audio-buffer-speech-stopped) event, instead, or a combination of the two.
-
-### Customization
-
-You can customize the AI assistant by modifying the `SYSTEM_MESSAGE` in `main.py`. This controls the AI's personality and behavior.
-
-## Troubleshooting
-
-- **Microphone not working**: Make sure your browser has permission to access your microphone
-- **No audio output**: Check that your speakers/headphones are connected and not muted
-- **Connection errors**: Verify your OpenAI API key is correct and you have access to the Realtime API
-- **Browser compatibility**: This app requires a modern browser with WebRTC support
+Or simply:
+```bash
+docker run -p 5050:5050 speech-assistant
+```
 
 ## Development
 
-The application consists of:
-- `main.py`: FastAPI server that handles WebSocket connections and OpenAI API communication
-- `templates/index.html`: The main web interface
-- `static/app.js`: JavaScript code that handles browser audio and WebSocket communication
-- `requirements.txt`: Python dependencies
+### Local Development (without Docker)
+
+1. Run the setup script:
+```bash
+./scripts/setup.sh
+```
+
+2. Or manually:
+   - Create virtual environment: `python3 -m venv .venv`
+   - Activate it: `source .venv/bin/activate`
+   - Install package: `pip install -e .`
+   - Set up environment variables in `.env` file
+
+3. Run the application:
+```bash
+python main.py
+```
+
+## API Endpoints
+
+- `GET /` - Main application interface
+- `GET /health` - Health check endpoint
+- `GET /call-logs` - Get all call logs
+- `GET /call-logs/{log_id}` - Get specific call log
+- `POST /call-logs/{log_id}/end` - End a call and generate summary
+- `GET /reset-conversation` - Reset conversation state (for testing)
+- `WS /ws` - WebSocket endpoint for real-time communication
+
+## Environment Variables
+
+- `OPENAI_API_KEY` - Your OpenAI API key (required)
+- `PORT` - Port to run the server on (default: 5050)
+
+## Project Structure
+
+```
+speech-assistant-openai-realtime-api-python/
+├── src/
+│   └── speech_assistant/   # Main package
+│       ├── __init__.py     # Package initialization
+│       ├── main.py         # FastAPI application
+│       ├── moving_agent.py # Moving request management
+│       └── config.py       # Configuration settings
+├── static/                 # Static files (JS, CSS)
+├── templates/              # HTML templates
+├── tests/                  # Test files
+├── docker/                 # Docker configuration files
+├── docs/                   # Documentation
+├── scripts/                # Utility scripts
+├── call_log/              # Call logging data
+├── main.py                 # Entry point
+├── requirements.txt        # Python dependencies
+├── pyproject.toml          # Project configuration
+└── README.md               # This file
+```
+
+## Health Check
+
+The application includes a health check endpoint at `/health` that returns:
+
+```json
+{
+  "status": "healthy",
+  "message": "Speech Assistant is running!"
+}
+```
+
+## Call Logging
+
+The application automatically logs all conversations in real-time:
+
+- **Real-time Transcription**: Every spoken word is captured and logged
+- **Speaker Identification**: Distinguishes between customer and assistant (Eva)
+- **Automatic Summarization**: When a call ends, an LLM generates a professional summary
+- **Persistent Storage**: All call logs are saved to JSON files in the `call_log/` directory
+
+### Call Log Structure
+
+Each call log contains:
+- Call ID and timestamps
+- Full conversation transcript
+- Call duration
+- AI-generated summary
+- Metadata
+
+### Ending a Call
+
+To end a call and generate a summary, make a POST request to:
+```
+POST /call-logs/{call_id}/end
+```
+
+This will return the generated summary and save the complete call log.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **OpenAI API Key not set**: Make sure your `.env` file contains a valid `OPENAI_API_KEY`
+2. **Port already in use**: Change the `PORT` environment variable or stop other services using port 5050
+3. **WebSocket connection issues**: Ensure your browser supports WebSockets and check the browser console for errors
+
+### Docker Issues
+
+1. **Build fails**: Make sure all files are present and the Dockerfile is in the project root
+2. **Container won't start**: Check the logs with `docker-compose logs`
+3. **Permission issues**: Ensure the `moving_requests` directory has proper permissions
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test with Docker
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

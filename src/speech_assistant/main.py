@@ -6,7 +6,7 @@ import time
 import websockets
 from websockets.asyncio.connection import State
 from fastapi import FastAPI, WebSocket, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.websockets import WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,6 +17,8 @@ from .config import (
     GREETING, SHOW_TIMING_MATH, STATIC_DIR, TEMPLATES_DIR
 )
 from .simple_call_logger import simple_call_logger
+from .config import WA_VERIFY_TOKEN
+from .whatsapp_service import WhatsAppService
 
 # Global conversation store to maintain context across connections
 conversation_store = {
@@ -26,6 +28,7 @@ conversation_store = {
 }
 
 app = FastAPI()
+wa_service = WhatsAppService()
 
 # Initialize server start time
 if conversation_store['server_start_time'] is None:
@@ -60,6 +63,37 @@ async def index_page(request: Request):
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "message": "Speech Assistant is running!"}
+
+
+# WhatsApp Webhook Verification (GET)
+@app.get("/wa/webhook")
+async def wa_webhook_verify(request: Request):
+    mode = request.query_params.get("hub.mode")
+    token = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
+    if mode == "subscribe" and token == WA_VERIFY_TOKEN and challenge:
+        return PlainTextResponse(challenge, status_code=200)
+    raise HTTPException(status_code=403, detail="Forbidden")
+
+
+# WhatsApp Webhook Receiver (POST)
+@app.post("/wa/webhook")
+async def wa_webhook_receive(request: Request):
+    try:
+        payload = await request.json()
+        entry = (payload.get("entry") or [{}])[0]
+        changes = (entry.get("changes") or [{}])[0]
+        value = changes.get("value") or {}
+        messages = value.get("messages") or []
+        if messages:
+            msg = messages[0]
+            from_id = msg.get("from")
+            text_body = (msg.get("text") or {}).get("body")
+            if from_id and text_body:
+                await wa_service.send_text(from_id, f"You said: {text_body}")
+        return JSONResponse({"status": "ok"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
 
 @app.get("/call-logs", response_class=JSONResponse)
 async def get_call_logs():
